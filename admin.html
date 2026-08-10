@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Umra Chipta — Admin panel</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+  <!-- LOGIN EKRANI -->
+  <div id="login-screen" class="login-wrap">
+    <form id="login-form" class="login-card">
+      <h1 class="login-title">Umra Chipta<br><span>Admin panel</span></h1>
+      <label class="a-label">Parol</label>
+      <input id="login-password" type="password" class="a-input" placeholder="Admin parolni kiriting" required>
+      <button class="a-btn-primary" type="submit">Kirish</button>
+      <p id="login-error" class="login-error hidden">Parol noto'g'ri</p>
+    </form>
+  </div>
+
+  <!-- ASOSIY PANEL -->
+  <div id="panel" class="panel hidden">
+    <header class="a-header">
+      <div class="a-header-title">✈️ Umra Chipta — Admin</div>
+      <button id="logout-btn" class="a-logout">Chiqish</button>
+    </header>
+
+    <nav class="a-tabs">
+      <button class="a-tab active" data-tab="orders">📋 Buyurtmalar</button>
+      <button class="a-tab" data-tab="flights">➕ Chipta qo'shish</button>
+    </nav>
+
+    <main class="a-main">
+
+      <!-- BUYURTMALAR -->
+      <section id="tab-orders" class="a-tab-content">
+        <div class="a-filter-row">
+          <select id="status-filter" class="a-select">
+            <option value="">Barcha holatlar</option>
+            <option value="new">Yangi</option>
+            <option value="awaiting_confirmation">Tasdiq kutilmoqda</option>
+            <option value="confirmed">Tasdiqlangan</option>
+            <option value="rejected">Rad etilgan</option>
+          </select>
+          <button id="refresh-orders" class="a-btn-secondary">🔄 Yangilash</button>
+        </div>
+        <div id="orders-list" class="a-list"></div>
+        <div id="orders-empty" class="a-empty hidden">Buyurtmalar topilmadi.</div>
+      </section>
+
+      <!-- QO'LDA CHIPTA QO'SHISH -->
+      <section id="tab-flights" class="a-tab-content hidden">
+        <div class="a-card">
+          <h2 class="a-card-title">Yangi chipta qo'shish</h2>
+          <p class="a-text">Bu yerda qo'shgan chiptalaringiz Mini App qidiruv natijalarida "Bizning agentlik" belgisi bilan eng tepada chiqadi.</p>
+
+          <div class="a-grid-2">
+            <div>
+              <label class="a-label">Qayerdan</label>
+              <select id="f_origin" class="a-select">
+                <option value="tashkent">Toshkent (TAS)</option>
+                <option value="samarkand">Samarqand (SKD)</option>
+              </select>
+            </div>
+            <div>
+              <label class="a-label">Qayerga</label>
+              <select id="f_destination" class="a-select">
+                <option value="jeddah">Jidda (JED)</option>
+                <option value="madinah">Madina (MED)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="a-grid-2">
+            <div>
+              <label class="a-label">Jo'nash sanasi</label>
+              <input id="f_depart_date" type="date" class="a-input">
+            </div>
+            <div>
+              <label class="a-label">Jo'nash vaqti</label>
+              <input id="f_departure_time" type="time" class="a-input">
+            </div>
+          </div>
+
+          <div class="a-grid-2">
+            <div>
+              <label class="a-label">Narxi (USD)</label>
+              <input id="f_price" type="number" min="0" class="a-input" placeholder="450">
+            </div>
+            <div>
+              <label class="a-label">Bo'sh o'rindiqlar soni</label>
+              <input id="f_seats" type="number" min="0" class="a-input" placeholder="10">
+            </div>
+          </div>
+
+          <div class="a-grid-2">
+            <div>
+              <label class="a-label">Aviakompaniya</label>
+              <input id="f_airline" class="a-input" placeholder="Uzbekistan Airways">
+            </div>
+            <div>
+              <label class="a-label">Reys raqami</label>
+              <input id="f_flight_number" class="a-input" placeholder="HY-123">
+            </div>
+          </div>
+
+          <button id="btn-add-flight" class="a-btn-primary">Chiptani qo'shish</button>
+        </div>
+
+        <h2 class="a-section-title">Qo'shilgan chiptalar</h2>
+        <div id="flights-list" class="a-list"></div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>
