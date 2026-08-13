@@ -69,7 +69,12 @@ async def root():
 @app.get("/api/search")
 async def api_search(origin: str, destination: str, depart_date: str):
     # 1) O'zimiz (admin panel orqali) qo'lda qo'shgan chiptalar — har doim birinchi ko'rsatiladi
-    manual = db.list_manual_flights(origin, destination, depart_date)
+    try:
+        manual = db.list_manual_flights(origin, destination, depart_date)
+    except Exception as e:
+        log.exception("manual_flights so'rovida xato (jadval hali yaratilmagan bo'lishi mumkin)")
+        manual = []
+
     manual_results = [{
         "origin": origin.upper(),
         "destination": destination.upper(),
