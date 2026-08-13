@@ -2,120 +2,113 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Umra Chipta — Admin panel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Umra Chipta — Aviachiptalar</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
-<link rel="stylesheet" href="admin.css">
+<link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="tg-body">
 
-  <!-- LOGIN EKRANI -->
-  <div id="login-screen" class="login-wrap">
-    <form id="login-form" class="login-card">
-      <h1 class="login-title">Umra Chipta<br><span>Admin panel</span></h1>
-      <label class="a-label">Parol</label>
-      <input id="login-password" type="password" class="a-input" placeholder="Admin parolni kiriting" required>
-      <button class="a-btn-primary" type="submit">Kirish</button>
-      <p id="login-error" class="login-error hidden">Parol noto'g'ri</p>
-    </form>
-  </div>
+  <!-- Header -->
+  <header class="tg-header">
+    <div class="tg-header-pattern"></div>
+    <div class="tg-header-inner">
+      <div class="tg-logo">✈️</div>
+      <div>
+        <h1 class="tg-title">Umra Chipta</h1>
+        <p class="tg-subtitle">Toshkent / Samarqand → Jidda / Madina</p>
+      </div>
+    </div>
+  </header>
 
-  <!-- ASOSIY PANEL -->
-  <div id="panel" class="panel hidden">
-    <header class="a-header">
-      <div class="a-header-title">✈️ Umra Chipta — Admin</div>
-      <button id="logout-btn" class="a-logout">Chiqish</button>
-    </header>
+  <main id="app" class="tg-main">
 
-    <nav class="a-tabs">
-      <button class="a-tab active" data-tab="orders">📋 Buyurtmalar</button>
-      <button class="a-tab" data-tab="flights">➕ Chipta qo'shish</button>
-    </nav>
-
-    <main class="a-main">
-
-      <!-- BUYURTMALAR -->
-      <section id="tab-orders" class="a-tab-content">
-        <div class="a-filter-row">
-          <select id="status-filter" class="a-select">
-            <option value="">Barcha holatlar</option>
-            <option value="new">Yangi</option>
-            <option value="awaiting_confirmation">Tasdiq kutilmoqda</option>
-            <option value="confirmed">Tasdiqlangan</option>
-            <option value="rejected">Rad etilgan</option>
-          </select>
-          <button id="refresh-orders" class="a-btn-secondary">🔄 Yangilash</button>
-        </div>
-        <div id="orders-list" class="a-list"></div>
-        <div id="orders-empty" class="a-empty hidden">Buyurtmalar topilmadi.</div>
-      </section>
-
-      <!-- QO'LDA CHIPTA QO'SHISH -->
-      <section id="tab-flights" class="a-tab-content hidden">
-        <div class="a-card">
-          <h2 class="a-card-title">Yangi chipta qo'shish</h2>
-          <p class="a-text">Bu yerda qo'shgan chiptalaringiz Mini App qidiruv natijalarida "Bizning agentlik" belgisi bilan eng tepada chiqadi.</p>
-
-          <div class="a-grid-2">
-            <div>
-              <label class="a-label">Qayerdan</label>
-              <select id="f_origin" class="a-select">
-                <option value="tashkent">Toshkent (TAS)</option>
-                <option value="samarkand">Samarqand (SKD)</option>
-              </select>
-            </div>
-            <div>
-              <label class="a-label">Qayerga</label>
-              <select id="f_destination" class="a-select">
-                <option value="jeddah">Jidda (JED)</option>
-                <option value="madinah">Madina (MED)</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="a-grid-2">
-            <div>
-              <label class="a-label">Jo'nash sanasi</label>
-              <input id="f_depart_date" type="date" class="a-input">
-            </div>
-            <div>
-              <label class="a-label">Jo'nash vaqti</label>
-              <input id="f_departure_time" type="time" class="a-input">
-            </div>
-          </div>
-
-          <div class="a-grid-2">
-            <div>
-              <label class="a-label">Narxi (USD)</label>
-              <input id="f_price" type="number" min="0" class="a-input" placeholder="450">
-            </div>
-            <div>
-              <label class="a-label">Bo'sh o'rindiqlar soni</label>
-              <input id="f_seats" type="number" min="0" class="a-input" placeholder="10">
-            </div>
-          </div>
-
-          <div class="a-grid-2">
-            <div>
-              <label class="a-label">Aviakompaniya</label>
-              <input id="f_airline" class="a-input" placeholder="Uzbekistan Airways">
-            </div>
-            <div>
-              <label class="a-label">Reys raqami</label>
-              <input id="f_flight_number" class="a-input" placeholder="HY-123">
-            </div>
-          </div>
-
-          <button id="btn-add-flight" class="a-btn-primary">Chiptani qo'shish</button>
+    <!-- SCREEN 1: Qidiruv -->
+    <section id="screen-search" class="tg-screen">
+      <div class="tg-card">
+        <label class="tg-label">Qayerdan</label>
+        <div class="tg-autocomplete">
+          <input id="origin" type="text" class="tg-input" placeholder="Shahar yoki aeroport nomi (masalan: Tashkent)" autocomplete="off">
+          <input type="hidden" id="origin_code">
+          <div id="origin_suggestions" class="tg-suggestions hidden"></div>
         </div>
 
-        <h2 class="a-section-title">Qo'shilgan chiptalar</h2>
-        <div id="flights-list" class="a-list"></div>
-      </section>
+        <label class="tg-label">Qayerga</label>
+        <div class="tg-autocomplete">
+          <input id="destination" type="text" class="tg-input" placeholder="Shahar yoki aeroport nomi (masalan: Jeddah)" autocomplete="off">
+          <input type="hidden" id="destination_code">
+          <div id="destination_suggestions" class="tg-suggestions hidden"></div>
+        </div>
 
-    </main>
-  </div>
+        <label class="tg-label">Jo'nash sanasi</label>
+        <input id="depart_date" type="date" class="tg-input">
 
-  <script src="admin.js"></script>
+        <label class="tg-label">Yo'lovchilar soni</label>
+        <input id="passengers" type="number" min="1" max="9" value="1" class="tg-input">
+
+        <button id="btn-search" class="tg-btn-primary">Chiptalarni qidirish</button>
+      </div>
+      <p class="tg-hint">Narxlar Travelpayouts (Aviasales) tizimidan real vaqtda olinadi.</p>
+    </section>
+
+    <!-- SCREEN 2: Natijalar -->
+    <section id="screen-results" class="tg-screen hidden">
+      <button class="tg-back" data-back="screen-search">← Qidiruvga qaytish</button>
+      <div id="results-list" class="tg-list"></div>
+      <div id="results-empty" class="tg-empty hidden">Bu yo'nalishda hozircha chiptalar topilmadi. Sanani o'zgartirib ko'ring.</div>
+    </section>
+
+    <!-- SCREEN 3: Passport -->
+    <section id="screen-passport" class="tg-screen hidden">
+      <button class="tg-back" data-back="screen-results">← Natijalarga qaytish</button>
+      <div class="tg-card" id="selected-flight-summary"></div>
+
+      <div class="tg-card">
+        <h2 class="tg-card-title">Pasport ma'lumotlari</h2>
+        <label class="tg-label">Ism</label>
+        <input id="p_first_name" class="tg-input" placeholder="Masalan: Aziz">
+        <label class="tg-label">Familiya</label>
+        <input id="p_last_name" class="tg-input" placeholder="Masalan: Karimov">
+        <label class="tg-label">Passport raqami</label>
+        <input id="p_number" class="tg-input" placeholder="AB1234567">
+        <label class="tg-label">Tug'ilgan yil</label>
+        <input id="p_birth_year" type="number" class="tg-input" placeholder="1995">
+        <label class="tg-label">Passport amal qilish muddati</label>
+        <input id="p_expiry" type="date" class="tg-input">
+        <button id="btn-to-payment" class="tg-btn-primary">Davom etish</button>
+      </div>
+    </section>
+
+    <!-- SCREEN 4: To'lov -->
+    <section id="screen-payment" class="tg-screen hidden">
+      <button class="tg-back" data-back="screen-passport">← Orqaga</button>
+      <div class="tg-card">
+        <h2 class="tg-card-title">To'lov</h2>
+        <p class="tg-text">Quyidagi karta raqamiga to'lovni amalga oshiring va chekni (skrinshot) yuklang:</p>
+        <div class="tg-card-number" id="card-number">8600 0000 0000 0000</div>
+        <p class="tg-text-muted" id="card-owner">F.I.Sh: —</p>
+
+        <label class="tg-label">To'lov cheki (skrinshot)</label>
+        <input id="payment_file" type="file" accept="image/*" class="tg-input">
+        <img id="payment_preview" class="tg-preview hidden">
+
+        <button id="btn-submit-order" class="tg-btn-primary">Buyurtmani yuborish</button>
+      </div>
+    </section>
+
+    <!-- SCREEN 5: Muvaffaqiyat -->
+    <section id="screen-success" class="tg-screen hidden">
+      <div class="tg-card tg-success">
+        <div class="tg-success-icon">✅</div>
+        <h2 class="tg-card-title">Buyurtma qabul qilindi!</h2>
+        <p class="tg-text">Buyurtmangiz #<span id="success-order-id"></span> administratorga yuborildi. To'lov tasdiqlangandan so'ng elektron chiptangiz shu bot orqali yuboriladi.</p>
+        <button id="btn-new-order" class="tg-btn-secondary">Yangi qidiruv</button>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="app.js"></script>
 </body>
 </html>
