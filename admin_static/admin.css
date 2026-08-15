@@ -88,6 +88,30 @@ body {
   font-size: 14px;
   background: #fff;
 }
+
+.a-autocomplete { position: relative; }
+.a-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #dfe3e2;
+  border-radius: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 50;
+  box-shadow: 0 6px 16px rgba(0,0,0,.12);
+}
+.a-suggestion-item {
+  padding: 10px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(0,0,0,.06);
+}
+.a-suggestion-item:last-child { border-bottom: none; }
+.a-suggestion-item:hover { background: #f2f4f3; }
+.a-suggestion-code { font-weight: 700; color: var(--a-accent); margin-right: 6px; }
 .a-btn-secondary {
   padding: 10px 16px;
   border-radius: 10px;
