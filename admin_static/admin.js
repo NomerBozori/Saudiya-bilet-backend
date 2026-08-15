@@ -1,6 +1,60 @@
 // Backend shu domenning o'zida ishlagani uchun API_BASE bo'sh qoldirilishi mumkin
 const API_BASE = "";
 
+// ==================== AVTOMATIK TAKLIF (dunyoning istalgan shahri) ====================
+function setupFlightAutocomplete(inputId, hiddenId, boxId) {
+  const input = document.getElementById(inputId);
+  const hidden = document.getElementById(hiddenId);
+  const box = document.getElementById(boxId);
+  let debounceTimer = null;
+
+  input.addEventListener("input", () => {
+    hidden.value = "";
+    const term = input.value.trim();
+    clearTimeout(debounceTimer);
+    if (term.length < 2) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return;
+    }
+    debounceTimer = setTimeout(async () => {
+      try {
+        const url = `https://autocomplete.travelpayouts.com/places2?term=${encodeURIComponent(term)}&locale=uz&types[]=city&types[]=airport`;
+        const res = await fetch(url);
+        const items = await res.json();
+        if (!items || !items.length) {
+          box.classList.add("hidden");
+          box.innerHTML = "";
+          return;
+        }
+        box.innerHTML = "";
+        items.slice(0, 8).forEach(item => {
+          const label = item.name + (item.country_name ? `, ${item.country_name}` : "");
+          const el = document.createElement("div");
+          el.className = "a-suggestion-item";
+          el.innerHTML = `<span class="a-suggestion-code">${item.code}</span>${label}`;
+          el.addEventListener("mousedown", () => {
+            input.value = label;
+            hidden.value = item.code;
+            box.classList.add("hidden");
+          });
+          box.appendChild(el);
+        });
+        box.classList.remove("hidden");
+      } catch (e) {
+        console.error("Autocomplete error:", e);
+      }
+    }, 300);
+  });
+
+  input.addEventListener("blur", () => {
+    setTimeout(() => box.classList.add("hidden"), 200);
+  });
+}
+
+setupFlightAutocomplete("f_origin", "f_origin_code", "f_origin_suggestions");
+setupFlightAutocomplete("f_destination", "f_destination_code", "f_destination_suggestions");
+
 // ==================== LOGIN ====================
 function getPassword() {
   return localStorage.getItem("admin_password") || "";
@@ -210,9 +264,17 @@ function renderFlights(flights) {
 }
 
 document.getElementById("btn-add-flight").addEventListener("click", async () => {
+  const originCode = document.getElementById("f_origin_code").value;
+  const destinationCode = document.getElementById("f_destination_code").value;
+
+  if (!originCode || !destinationCode) {
+    alert("Iltimos, \"Qayerdan\" va \"Qayerga\" maydonlarida ro'yxatdan chiqqan shahar/aeroportni tanlang.");
+    return;
+  }
+
   const payload = {
-    origin: document.getElementById("f_origin").value,
-    destination: document.getElementById("f_destination").value,
+    origin: originCode,
+    destination: destinationCode,
     depart_date: document.getElementById("f_depart_date").value,
     departure_time: document.getElementById("f_departure_time").value || null,
     price: parseFloat(document.getElementById("f_price").value),
@@ -231,6 +293,10 @@ document.getElementById("btn-add-flight").addEventListener("click", async () => 
       method: "POST",
       body: JSON.stringify(payload),
     });
+    document.getElementById("f_origin").value = "";
+    document.getElementById("f_destination").value = "";
+    document.getElementById("f_origin_code").value = "";
+    document.getElementById("f_destination_code").value = "";
     document.getElementById("f_price").value = "";
     document.getElementById("f_seats").value = "";
     document.getElementById("f_flight_number").value = "";
