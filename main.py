@@ -25,10 +25,12 @@ dp.include_router(bot_router)
 async def lifespan(app: FastAPI):
     # Ilova ishga tushganda Telegram webhook'ni o'rnatamiz
     webhook_url = f"{settings.WEBHOOK_BASE_URL}/webhook"
-    await bot.set_webhook(webhook_url, drop_pending_updates=True)
+    await bot.set_webhook(webhook_url, drop_pending_updates=False)
     log.info(f"Webhook o'rnatildi: {webhook_url}")
     yield
-    await bot.delete_webhook()
+    # Eslatma: shutdown paytida webhookni ATAYLAB o'chirmaymiz —
+    # Render'ning bepul tarifi tez-tez qayta ishga tushadi va bu webhookni
+    # bo'shatib qo'yishi mumkin edi.
 
 
 app = FastAPI(title="Umra Chipta API", lifespan=lifespan)
