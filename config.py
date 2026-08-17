@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     PAYMENT_CARD_NUMBER: str = "8600 0000 0000 0000"
     PAYMENT_CARD_OWNER: str = "F.I.Sh."
 
+    # API'dan kelgan chiptalar narxiga qo'shiladigan avtomatik foyda ustamasi (%)
+    MARKUP_PERCENT: float = 10.0
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
