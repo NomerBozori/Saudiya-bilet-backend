@@ -3,14 +3,24 @@ from config import settings
 
 # Shahar nomlaridan IATA kodlariga moslashtirish
 IATA = {
-    "tashkent": "TAS",
-    "toshkent": "TAS",
-    "samarkand": "SKD",
-    "samarqand": "SKD",
-    "jeddah": "JED",
-    "jidda": "JED",
-    "madinah": "MED",
-    "madina": "MED",
+    # O'zbekiston
+    "tashkent": "TAS", "toshkent": "TAS",
+    "samarkand": "SKD", "samarqand": "SKD",
+    "bukhara": "BHK", "buxoro": "BHK",
+    "fergana": "FEG", "fargona": "FEG",
+    "namangan": "NMA",
+    "andijan": "AZN", "andijon": "AZN",
+    "nukus": "NCU",
+    "urgench": "UGC", "urganch": "UGC",
+    "navoi": "NVI", "navoiy": "NVI",
+    "termez": "TMJ", "termiz": "TMJ",
+    "qarshi": "KSQ", "karshi": "KSQ",
+
+    # Saudiya Arabistoni
+    "jeddah": "JED", "jidda": "JED",
+    "madinah": "MED", "madina": "MED",
+    "riyadh": "RUH", "riyod": "RUH",
+    "dammam": "DMM",
 }
 
 PRICES_FOR_DATES_URL = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates"
@@ -19,6 +29,17 @@ LATEST_PRICES_URL = "https://api.travelpayouts.com/v2/prices/latest"
 
 def to_iata(city: str) -> str:
     return IATA.get(city.strip().lower(), city.strip().upper())
+
+
+def _apply_markup(price):
+    """API'dan kelgan narxga foyda ustamasini (MARKUP_PERCENT) qo'shadi."""
+    if price is None:
+        return price
+    try:
+        marked_up = float(price) * (1 + settings.MARKUP_PERCENT / 100)
+        return round(marked_up, 2)
+    except (TypeError, ValueError):
+        return price
 
 
 def _build_affiliate_link(raw_link: str) -> str:
@@ -55,10 +76,12 @@ async def search_flights(origin_city: str, destination_city: str, depart_date: s
 
     results = []
     for item in payload.get("data", []):
+        original_price = item.get("price")
+        marked_up_price = _apply_markup(original_price)
         results.append({
             "origin": item.get("origin"),
             "destination": item.get("destination"),
-            "price": item.get("price"),
+            "price": marked_up_price,
             "airline": item.get("airline"),
             "flight_number": item.get("flight_number"),
             "departure_at": item.get("departure_at"),
@@ -89,7 +112,7 @@ async def get_daily_cheapest(origin_city: str = "tashkent") -> list[dict]:
                     results.append({
                         "origin": origin,
                         "destination": dest,
-                        "value": item.get("value"),
+                        "value": _apply_markup(item.get("value")),
                         "depart_date": item.get("depart_date"),
                     })
     return results
