@@ -1,123 +1,213 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Umra Chipta — Admin panel</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link rel="stylesheet" href="admin.css?v=2">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saudiya Biletlari & Umra — Boshqaruv Paneli</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="admin.css?v=3">
 </head>
 <body>
 
-  <!-- LOGIN EKRANI -->
-  <div id="login-screen" class="login-wrap">
-    <form id="login-form" class="login-card">
-      <h1 class="login-title">Umra Chipta<br><span>Admin panel</span></h1>
-      <label class="a-label">Parol</label>
-      <input id="login-password" type="password" class="a-input" placeholder="Admin parolni kiriting" required>
-      <button class="a-btn-primary" type="submit">Kirish</button>
-      <p id="login-error" class="login-error hidden">Parol noto'g'ri</p>
-    </form>
-  </div>
-
-  <!-- ASOSIY PANEL -->
-  <div id="panel" class="panel hidden">
-    <header class="a-header">
-      <div class="a-header-title">✈️ Umra Chipta — Admin</div>
-      <button id="logout-btn" class="a-logout">Chiqish</button>
-    </header>
-
-    <nav class="a-tabs">
-      <button class="a-tab active" data-tab="orders">📋 Buyurtmalar</button>
-      <button class="a-tab" data-tab="flights">➕ Chipta qo'shish</button>
-    </nav>
-
-    <main class="a-main">
-
-      <!-- BUYURTMALAR -->
-      <section id="tab-orders" class="a-tab-content">
-        <div class="a-filter-row">
-          <select id="status-filter" class="a-select">
-            <option value="">Barcha holatlar</option>
-            <option value="new">Yangi</option>
-            <option value="awaiting_confirmation">Tasdiq kutilmoqda</option>
-            <option value="confirmed">Tasdiqlangan</option>
-            <option value="rejected">Rad etilgan</option>
-          </select>
-          <button id="refresh-orders" class="a-btn-secondary">🔄 Yangilash</button>
+    <!-- 1. LOGIN EKRANI -->
+    <div id="login-screen" class="login-wrap">
+        <div class="login-card">
+            <div class="login-badge">🇸🇦 ADMIN TIZIMI</div>
+            <h1 class="login-title">Saudiya Biletlari<br><span>Boshqaruv Paneli</span></h1>
+            <p class="login-desc">Tizimga kirish uchun maxfiy parolni kiriting</p>
+            <form id="login-form">
+                <div class="form-group">
+                    <label class="a-label">Admin Parol</label>
+                    <input id="login-password" type="password" class="a-input" placeholder="••••••••••••" required autocomplete="current-password">
+                </div>
+                <button class="a-btn-primary" type="submit">Tizimga Kirish ➔</button>
+                <p id="login-error" class="login-error hidden">❌ Kiritilgan parol noto'g'ri!</p>
+            </form>
         </div>
-        <div id="orders-list" class="a-list"></div>
-        <div id="orders-empty" class="a-empty hidden">Buyurtmalar topilmadi.</div>
-      </section>
+    </div>
 
-      <!-- QO'LDA CHIPTA QO'SHISH -->
-      <section id="tab-flights" class="a-tab-content hidden">
-        <div class="a-card">
-          <h2 class="a-card-title">Yangi chipta qo'shish</h2>
-          <p class="a-text">Bu yerda qo'shgan chiptalaringiz Mini App qidiruv natijalarida "Bizning agentlik" belgisi bilan eng tepada chiqadi.</p>
+    <!-- 2. ASOSIY PANEL -->
+    <div id="panel" class="panel hidden">
+        
+        <!-- Header -->
+        <header class="a-header">
+            <div class="a-header-left">
+                <div class="a-logo-icon">✈️</div>
+                <div>
+                    <div class="a-header-title">Saudiya Biletlari & Umra</div>
+                    <div class="a-header-subtitle">Admin Boshqaruv Markazi</div>
+                </div>
+            </div>
+            <div class="a-header-right">
+                <a href="/" target="_blank" class="a-btn-header-link">🌐 Saytni ko'rish</a>
+                <button id="logout-btn" class="a-logout">Chiqish 🚪</button>
+            </div>
+        </header>
 
-          <div class="a-grid-2">
-            <div>
-              <label class="a-label">Qayerdan</label>
-              <div class="a-autocomplete">
-                <input id="f_origin" type="text" class="a-input" placeholder="Shahar/aeroport (masalan: Tashkent)" autocomplete="off">
-                <input type="hidden" id="f_origin_code">
-                <div id="f_origin_suggestions" class="a-suggestions hidden"></div>
-              </div>
+        <div class="a-container">
+            
+            <!-- Statistika Kartalari -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon stat-total">📦</div>
+                    <div class="stat-info">
+                        <span class="stat-label">JAMI BUYURTMALAR</span>
+                        <strong id="stat-total-orders" class="stat-value">0</strong>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon stat-pending">⏳</div>
+                    <div class="stat-info">
+                        <span class="stat-label">TASDIQ KUTILMOQDA</span>
+                        <strong id="stat-pending-orders" class="stat-value">0</strong>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon stat-confirmed">✅</div>
+                    <div class="stat-info">
+                        <span class="stat-label">TASDIQLANGAN</span>
+                        <strong id="stat-confirmed-orders" class="stat-value">0</strong>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon stat-revenue">💵</div>
+                    <div class="stat-info">
+                        <span class="stat-label">JAMI TUSHUM</span>
+                        <strong id="stat-revenue" class="stat-value">$0</strong>
+                    </div>
+                </div>
             </div>
-            <div>
-              <label class="a-label">Qayerga</label>
-              <div class="a-autocomplete">
-                <input id="f_destination" type="text" class="a-input" placeholder="Shahar/aeroport (masalan: Jeddah)" autocomplete="off">
-                <input type="hidden" id="f_destination_code">
-                <div id="f_destination_suggestions" class="a-suggestions hidden"></div>
-              </div>
-            </div>
-          </div>
 
-          <div class="a-grid-2">
-            <div>
-              <label class="a-label">Jo'nash sanasi</label>
-              <input id="f_depart_date" type="date" class="a-input">
-            </div>
-            <div>
-              <label class="a-label">Jo'nash vaqti</label>
-              <input id="f_departure_time" type="time" class="a-input">
-            </div>
-          </div>
+            <!-- Navigatsiya Tablari -->
+            <nav class="a-tabs">
+                <button class="a-tab active" data-tab="orders">📋 Buyurtmalar Nazorati</button>
+                <button class="a-tab" data-tab="flights">➕ Yangi Chipta Qo'shish</button>
+                <button class="a-tab" data-tab="all-flights">✈️ Mavjud Chiptalar Ro'yxati</button>
+            </nav>
 
-          <div class="a-grid-2">
-            <div>
-              <label class="a-label">Narxi (USD)</label>
-              <input id="f_price" type="number" min="0" class="a-input" placeholder="450">
-            </div>
-            <div>
-              <label class="a-label">Bo'sh o'rindiqlar soni</label>
-              <input id="f_seats" type="number" min="0" class="a-input" placeholder="10">
-            </div>
-          </div>
+            <main class="a-main">
 
-          <div class="a-grid-2">
-            <div>
-              <label class="a-label">Aviakompaniya</label>
-              <input id="f_airline" class="a-input" placeholder="Uzbekistan Airways">
-            </div>
-            <div>
-              <label class="a-label">Reys raqami</label>
-              <input id="f_flight_number" class="a-input" placeholder="HY-123">
-            </div>
-          </div>
+                <!-- 1-TAB: BUYURTMALAR -->
+                <section id="tab-orders" class="a-tab-content">
+                    <div class="a-filter-card">
+                        <div class="a-filter-grid">
+                            <div class="a-filter-item">
+                                <label class="a-label">Holat bo'yicha filter:</label>
+                                <select id="status-filter" class="a-select">
+                                    <option value="">Barcha holatlar</option>
+                                    <option value="new">🆕 Yangi buyurtmalar</option>
+                                    <option value="awaiting_confirmation">⏳ Tasdiq kutilayotgan (Chek bor)</option>
+                                    <option value="confirmed">✅ Tasdiqlanganlar</option>
+                                    <option value="rejected">❌ Rad etilganlar</option>
+                                </select>
+                            </div>
+                            <div class="a-filter-item">
+                                <label class="a-label">Qidiruv (Ism yoki Pasport):</label>
+                                <input type="text" id="orders-search" class="a-input" placeholder="Qidiruv..." oninput="filterOrdersLocally()">
+                            </div>
+                            <div class="a-filter-item flex-end">
+                                <button id="refresh-orders" class="a-btn-secondary">🔄 Yangilash</button>
+                            </div>
+                        </div>
+                    </div>
 
-          <button id="btn-add-flight" class="a-btn-primary">Chiptani qo'shish</button>
+                    <div id="orders-list" class="a-list"></div>
+                    <div id="orders-empty" class="a-empty hidden">
+                        <div class="empty-icon">📭</div>
+                        <p>Hozircha buyurtmalar topilmadi.</p>
+                    </div>
+                </section>
+
+                <!-- 2-TAB: QO'LDA CHIPTA QO'SHISH -->
+                <section id="tab-flights" class="a-tab-content hidden">
+                    <div class="a-card">
+                        <div class="a-card-header">
+                            <h2 class="a-card-title">➕ Yangi Maxsus Aviachipta Qo'shish</h2>
+                            <p class="a-text">Qo'shilgan chiptalar Mini App va Botda eng yuqori o'rinda "Bizning Agentlik" yorlig'i bilan ko'rinadi.</p>
+                        </div>
+
+                        <div class="a-grid-2">
+                            <div>
+                                <label class="a-label">Qayerdan (Uchish shahri/aeroport)</label>
+                                <div class="a-autocomplete">
+                                    <input id="f_origin" type="text" class="a-input" placeholder="Masalan: Tashkent (TAS)" autocomplete="off">
+                                    <input type="hidden" id="f_origin_code">
+                                    <div id="f_origin_suggestions" class="a-suggestions hidden"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="a-label">Qayerga (Qo'nish shahri/aeroport)</label>
+                                <div class="a-autocomplete">
+                                    <input id="f_destination" type="text" class="a-input" placeholder="Masalan: Jeddah (JED)" autocomplete="off">
+                                    <input type="hidden" id="f_destination_code">
+                                    <div id="f_destination_suggestions" class="a-suggestions hidden"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="a-grid-2">
+                            <div>
+                                <label class="a-label">Jo'nash Sanasi</label>
+                                <input id="f_depart_date" type="date" class="a-input">
+                            </div>
+                            <div>
+                                <label class="a-label">Jo'nash Vaqti (Ixtiyoriy)</label>
+                                <input id="f_departure_time" type="time" class="a-input">
+                            </div>
+                        </div>
+
+                        <div class="a-grid-2">
+                            <div>
+                                <label class="a-label">Chipta Narxi ($ USD)</label>
+                                <input id="f_price" type="number" min="0" step="0.01" class="a-input" placeholder="380">
+                            </div>
+                            <div>
+                                <label class="a-label">Bo'sh O'rindiqlar Soni</label>
+                                <input id="f_seats" type="number" min="1" class="a-input" placeholder="10">
+                            </div>
+                        </div>
+
+                        <div class="a-grid-2">
+                            <div>
+                                <label class="a-label">Aviakompaniya Nomi</label>
+                                <input id="f_airline" class="a-input" placeholder="Centrum Air / Uzbekistan Airways">
+                            </div>
+                            <div>
+                                <label class="a-label">Reys Raqami</label>
+                                <input id="f_flight_number" class="a-input" placeholder="C6-331">
+                            </div>
+                        </div>
+
+                        <button id="btn-add-flight" class="a-btn-primary">💾 Chiptani Saqlash va E'lon Qilish</button>
+                    </div>
+                </section>
+
+                <!-- 3-TAB: MAVJUD CHIPTALAR -->
+                <section id="tab-all-flights" class="a-tab-content hidden">
+                    <div class="a-card-header flex-between">
+                        <h2 class="a-card-title">Mavjud Chiptalar Ro'yxati</h2>
+                        <button class="a-btn-secondary" onclick="loadFlights()">🔄 Ro'yxatni yangilash</button>
+                    </div>
+                    <div id="flights-list" class="a-list"></div>
+                </section>
+
+            </main>
         </div>
+    </div>
 
-        <h2 class="a-section-title">Qo'shilgan chiptalar</h2>
-        <div id="flights-list" class="a-list"></div>
-      </section>
+    <!-- Image Preview Modal -->
+    <div id="imgModal" class="modal-backdrop hidden" onclick="closeImgModal()">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div class="modal-top">
+                <h3>To'lov Cheki Skrinshoti</h3>
+                <button class="modal-close" onclick="closeImgModal()">&times;</button>
+            </div>
+            <img id="modalPreviewImg" src="" alt="Chek rasmi" class="modal-img">
+        </div>
+    </div>
 
-    </main>
-  </div>
-
-  <script src="admin.js?v=2"></script>
+    <script src="admin.js?v=3"></script>
 </body>
 </html>
