@@ -4,23 +4,24 @@ from config import settings
 # Shahar nomlaridan IATA kodlariga moslashtirish
 IATA = {
     # O'zbekiston
-    "tashkent": "TAS", "toshkent": "TAS",
-    "samarkand": "SKD", "samarqand": "SKD",
-    "bukhara": "BHK", "buxoro": "BHK",
-    "fergana": "FEG", "fargona": "FEG",
-    "namangan": "NMA",
-    "andijan": "AZN", "andijon": "AZN",
-    "nukus": "NCU",
-    "urgench": "UGC", "urganch": "UGC",
-    "navoi": "NVI", "navoiy": "NVI",
-    "termez": "TMJ", "termiz": "TMJ",
-    "qarshi": "KSQ", "karshi": "KSQ",
+    "tashkent": "TAS", "toshkent": "TAS", "tas": "TAS",
+    "samarkand": "SKD", "samarqand": "SKD", "skd": "SKD",
+    "bukhara": "BHK", "buxoro": "BHK", "bhk": "BHK",
+    "fergana": "FEG", "fargona": "FEG", "farg'ona": "FEG", "feg": "FEG",
+    "namangan": "NMA", "nma": "NMA",
+    "andijan": "AZN", "andijon": "AZN", "azn": "AZN",
+    "nukus": "NCU", "ncu": "NCU",
+    "urgench": "UGC", "urganch": "UGC", "ugc": "UGC",
+    "navoi": "NVI", "navoiy": "NVI", "nvi": "NVI",
+    "termez": "TMJ", "termiz": "TMJ", "tmj": "TMJ",
+    "qarshi": "KSQ", "karshi": "KSQ", "ksq": "KSQ",
 
     # Saudiya Arabistoni
-    "jeddah": "JED", "jidda": "JED",
-    "madinah": "MED", "madina": "MED",
-    "riyadh": "RUH", "riyod": "RUH",
-    "dammam": "DMM",
+    "jeddah": "JED", "jidda": "JED", "jed": "JED",
+    "madinah": "MED", "madina": "MED", "med": "MED",
+    "riyadh": "RUH", "riyod": "RUH", "ar-riyod": "RUH", "ruh": "RUH",
+    "dammam": "DMM", "dmm": "DMM",
+    "taif": "TIF", "toif": "TIF", "tif": "TIF",
 }
 
 PRICES_FOR_DATES_URL = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates"
@@ -28,7 +29,10 @@ LATEST_PRICES_URL = "https://api.travelpayouts.com/v2/prices/latest"
 
 
 def to_iata(city: str) -> str:
-    return IATA.get(city.strip().lower(), city.strip().upper())
+    if not city:
+        return ""
+    clean = city.strip().lower()
+    return IATA.get(clean, city.strip().upper())
 
 
 def _apply_markup(price):
