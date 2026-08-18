@@ -1,11 +1,14 @@
+import io
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from aiogram import Bot, Dispatcher
 from aiogram.types import BufferedInputFile, Update
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 import database as db
@@ -14,6 +17,14 @@ from bot_handlers import router as bot_router
 from config import settings
 from order_actions import confirm_order as confirm_order_action
 from order_actions import reject_order as reject_order_action
+
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    HAS_OPENPYXL = True
+except ImportError:
+    HAS_OPENPYXL = False
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("saudiya-bilet")
@@ -259,6 +270,162 @@ async def admin_list_orders(status: str | None = None):
     return {"orders": orders}
 
 
+def _generate_excel_bytes(orders: list[dict]) -> bytes:
+    """Admin uchun buyurtmalarni Excel fayl sifatida generatsiya qiladi."""
+    if HAS_OPENPYXL:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Buyurtmalar"
+
+        headers = [
+            "ID",
+            "Ism",
+            "Familiya",
+            "Pasport Raqami",
+            "Tug'ilgan yil",
+            "Pasport Muddati",
+            "Yo'nalish",
+            "Sana",
+            "Yo'lovchilar",
+            "Narx ($)",
+            "Holati",
+            "Telegram ID",
+            "Username",
+            "To'lov Cheki URL",
+            "Yaratilgan sana",
+        ]
+
+        header_fill = PatternFill(start_color="0F5132", end_color="0F5132", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=11)
+        border = Border(
+            left=Side(style="thin", color="E2E8F0"),
+            right=Side(style="thin", color="E2E8F0"),
+            top=Side(style="thin", color="E2E8F0"),
+            bottom=Side(style="thin", color="E2E8F0"),
+        )
+        center = Alignment(horizontal="center", vertical="center")
+        left_align = Alignment(horizontal="left", vertical="center")
+
+        for col_idx, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_idx, value=h)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = center
+            cell.border = border
+
+        STATUS_UZ = {
+            "new": "Yangi",
+            "awaiting_confirmation": "Tasdiq kutilmoqda",
+            "confirmed": "Tasdiqlangan",
+            "rejected": "Rad etilgan",
+        }
+
+        for row_idx, order in enumerate(orders, 2):
+            p_raw = order.get("passports")
+            if isinstance(p_raw, list) and len(p_raw) > 0 and isinstance(p_raw[0], dict):
+                passport = p_raw[0]
+            elif isinstance(p_raw, dict):
+                passport = p_raw
+            else:
+                passport = {}
+
+            route = f"{(order.get('origin') or '').upper()} -> {(order.get('destination') or '').upper()}"
+
+            row = [
+                order.get("id"),
+                passport.get("first_name") or "",
+                passport.get("last_name") or "",
+                passport.get("passport_number") or "",
+                passport.get("birth_year") or "",
+                passport.get("expiry_date") or "",
+                route,
+                order.get("depart_date") or "",
+                order.get("passengers") or 1,
+                order.get("price") or "",
+                STATUS_UZ.get(order.get("status"), order.get("status") or ""),
+                order.get("telegram_user_id") or "",
+                order.get("username") or "",
+                order.get("payment_screenshot_url") or "",
+                str(order.get("created_at") or "")[:19],
+            ]
+
+            for col_idx, val in enumerate(row, 1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                cell.border = border
+                cell.alignment = left_align if col_idx in (2, 3, 4, 13, 14) else center
+                if row_idx % 2 == 0:
+                    cell.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+        # Auto width
+        widths = [6, 14, 14, 16, 10, 14, 16, 12, 10, 10, 18, 14, 14, 28, 18]
+        for i, w in enumerate(widths, 1):
+            ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+
+        ws.auto_filter.ref = ws.dimensions
+        ws.freeze_panes = "A2"
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return buf.read()
+    else:
+        # Fallback: CSV (Excel ham ochadi)
+        import csv
+
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow([
+            "ID", "Ism", "Familiya", "Pasport", "Tugilgan yil", "Muddat",
+            "Yonalish", "Sana", "Yolovchilar", "Narx", "Holati", "Telegram ID", "Username", "Chek URL"
+        ])
+        for order in orders:
+            p_raw = order.get("passports")
+            if isinstance(p_raw, list) and p_raw and isinstance(p_raw[0], dict):
+                passport = p_raw[0]
+            elif isinstance(p_raw, dict):
+                passport = p_raw
+            else:
+                passport = {}
+            writer.writerow([
+                order.get("id"),
+                passport.get("first_name"),
+                passport.get("last_name"),
+                passport.get("passport_number"),
+                passport.get("birth_year"),
+                passport.get("expiry_date"),
+                f"{order.get('origin')}->{order.get('destination')}",
+                order.get("depart_date"),
+                order.get("passengers"),
+                order.get("price"),
+                order.get("status"),
+                order.get("telegram_user_id"),
+                order.get("username"),
+                order.get("payment_screenshot_url"),
+            ])
+        return buf.getvalue().encode("utf-8-sig")
+
+
+@app.get("/api/admin/orders/export", dependencies=[Depends(verify_admin)])
+async def admin_export_orders(status: str | None = None):
+    """Buyurtmalarni Excel (xlsx) formatida eksport qilish."""
+    orders = db.get_orders_with_passport(status=status if status else None)
+    xlsx_bytes = _generate_excel_bytes(orders)
+
+    filename = f"buyurtmalar_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
+    if not HAS_OPENPYXL:
+        filename = filename.replace(".xlsx", ".csv")
+
+    media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    if not HAS_OPENPYXL:
+        media_type = "text/csv; charset=utf-8"
+
+    return StreamingResponse(
+        io.BytesIO(xlsx_bytes),
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @app.post("/api/admin/orders/{order_id}/confirm", dependencies=[Depends(verify_admin)])
 async def admin_confirm_order(order_id: int):
     result = await confirm_order_action(bot, order_id)
@@ -274,6 +441,17 @@ async def admin_reject_order(order_id: int, payload: dict):
     if not result["ok"]:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
+
+
+@app.delete("/api/admin/orders/{order_id}", dependencies=[Depends(verify_admin)])
+async def admin_delete_order(order_id: int):
+    """Oxirgi o'chirish tugmasi – buyurtmani to'liq o'chirish."""
+    try:
+        db.delete_order(order_id)
+        return {"ok": True, "deleted_id": order_id}
+    except Exception as e:
+        log.exception(f"Buyurtmani o'chirishda xatolik #{order_id}")
+        raise HTTPException(status_code=500, detail=f"O'chirishda xatolik: {e}")
 
 
 @app.get("/api/admin/flights", dependencies=[Depends(verify_admin)])

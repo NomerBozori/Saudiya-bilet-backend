@@ -93,3 +93,12 @@ def delete_manual_flight(flight_id: int) -> None:
 
 def deactivate_manual_flight(flight_id: int) -> None:
     supabase.table("manual_flights").update({"is_active": False}).eq("id", flight_id).execute()
+
+
+def delete_order(order_id: int) -> None:
+    """Buyurtma va unga bog'liq pasportlarni to'liq o'chiradi (admin uchun)."""
+    try:
+        supabase.table("passports").delete().eq("order_id", order_id).execute()
+    except Exception:
+        pass
+    supabase.table("orders").delete().eq("id", order_id).execute()

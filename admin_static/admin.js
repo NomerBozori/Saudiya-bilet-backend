@@ -1,5 +1,6 @@
 const API_BASE = "";
 let cachedOrders = [];
+let pendingDelete = { type: null, id: null };
 
 // ==================== AVTOMATIK TAKLIF (SHAHARLAR) ====================
 function setupFlightAutocomplete(inputId, hiddenId, boxId) {
@@ -217,7 +218,8 @@ function filterOrdersLocally() {
     const fullName = `${passport.first_name || ""} ${passport.last_name || ""}`.toLowerCase();
     const pNum = (passport.passport_number || "").toLowerCase();
     const orderId = String(order.id || "");
-    return fullName.includes(query) || pNum.includes(query) || orderId.includes(query);
+    const route = `${order.origin || ""} ${order.destination || ""}`.toLowerCase();
+    return fullName.includes(query) || pNum.includes(query) || orderId.includes(query) || route.includes(query);
   });
   renderOrders(filtered);
 }
@@ -268,22 +270,27 @@ function renderOrders(orders) {
         </div>
       </div>
 
-      <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
-        👤 Telegram: <code>${order.telegram_user_id || "-"}</code> ${order.username ? "(@" + order.username + ")" : ""}
+      <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+        <span>👤 Telegram: <code>${order.telegram_user_id || "-"}</code> ${order.username ? "(@" + order.username + ")" : ""}</span>
+        ${passport.birth_year ? `<span style="background:#F1F5F9; padding:2px 8px; border-radius:8px;">🎂 ${passport.birth_year}</span>` : ""}
       </div>
 
       ${order.payment_screenshot_url ? `
         <div style="margin-top: 8px; margin-bottom: 8px;">
-          <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">TO'LOV CHEKI (BOSING):</span>
+          <span style="font-size: 10.5px; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px; letter-spacing:0.5px;">TO'LOV CHEKI (BOSING):</span>
           <img class="order-photo-thumb" src="${order.payment_screenshot_url}" alt="To'lov cheki" onclick="openImgModal('${order.payment_screenshot_url}')">
         </div>
-      ` : ""}
+      ` : `<div style="font-size:11px; color:#94A3B8; margin:6px 0;">💳 To'lov cheki hali yuklanmagan</div>`}
 
-      ${order.status === "new" || order.status === "awaiting_confirmation" ? `
-        <div class="order-actions">
-          <button class="order-btn confirm" data-id="${order.id}" data-action="confirm">✅ Tasdiqlash & PDF Chipta Yuborish</button>
+      <div class="order-actions">
+        ${order.status === "new" || order.status === "awaiting_confirmation" ? `
+          <button class="order-btn confirm" data-id="${order.id}" data-action="confirm">✅ Tasdiqlash & PDF Yuborish</button>
           <button class="order-btn reject" data-id="${order.id}" data-action="reject">❌ Rad Etish</button>
-        </div>` : ""}
+        ` : `
+          <span style="font-size:11px; color:var(--text-muted); padding:8px 0;">☑️ ${STATUS_LABELS[order.status] || order.status}</span>
+        `}
+        <button class="order-btn delete" data-id="${order.id}" data-action="delete-order" title="Oxirgi o'chirish tugmasi">🗑 O'chirish</button>
+      </div>
     `;
     list.appendChild(card);
   });
@@ -294,16 +301,19 @@ function renderOrders(orders) {
   list.querySelectorAll("[data-action='reject']").forEach(btn => {
     btn.addEventListener("click", () => rejectOrder(btn.dataset.id));
   });
+  list.querySelectorAll("[data-action='delete-order']").forEach(btn => {
+    btn.addEventListener("click", () => openDeleteModal("order", btn.dataset.id));
+  });
 }
 
 async function confirmOrder(id) {
   if (!confirm(`#${id} raqamli buyurtmani tasdiqlaysizmi?\n\nMijozga avtomatik ravishda chiroyli PDF elektron chipta yuboriladi.`)) return;
   try {
     await apiFetch(`/api/admin/orders/${id}/confirm`, { method: "POST" });
-    alert(`Buyurtma #${id} muvaffaqiyatli tasdiqlandi!`);
+    alert(`✅ Buyurtma #${id} muvaffaqiyatli tasdiqlandi!`);
     loadOrders();
   } catch (e) {
-    alert("Xatolik: " + e.message);
+    alert("❌ Xatolik: " + e.message);
   }
 }
 
@@ -322,11 +332,92 @@ async function rejectOrder(id) {
   }
 }
 
+// ==================== OXIRGI O'CHIRISH TUGMASI LOGIKASI ====================
+function openDeleteModal(type, id) {
+  pendingDelete = { type, id };
+  const modal = document.getElementById("deleteConfirmModal");
+  const title = document.getElementById("delete-modal-title");
+  const desc = document.getElementById("delete-modal-desc");
+  if (type === "order") {
+    if (title) title.innerText = `Buyurtma #${id} o'chirilsinmi?`;
+    if (desc) desc.innerText = "Buyurtma va pasport ma'lumotlari butunlay o'chiriladi. Bu amalni ortga qaytarib bo'lmaydi!";
+  } else {
+    if (title) title.innerText = `Chipta #${id} o'chirilsinmi?`;
+    if (desc) desc.innerText = "Tanlangan aviachipta butunlay o'chiriladi.";
+  }
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeDeleteModal() {
+  const modal = document.getElementById("deleteConfirmModal");
+  if (modal) modal.classList.add("hidden");
+  pendingDelete = { type: null, id: null };
+}
+
+const deleteConfirmBtn = document.getElementById("delete-confirm-btn");
+if (deleteConfirmBtn) {
+  deleteConfirmBtn.addEventListener("click", async () => {
+    const { type, id } = pendingDelete;
+    if (!id) { closeDeleteModal(); return; }
+    try {
+      if (type === "order") {
+        await apiFetch(`/api/admin/orders/${id}`, { method: "DELETE" });
+        loadOrders();
+      } else {
+        await apiFetch(`/api/admin/flights/${id}`, { method: "DELETE" });
+        loadFlights();
+      }
+      closeDeleteModal();
+    } catch (e) {
+      alert("O'chirishda xatolik: " + e.message);
+    }
+  });
+}
+
 const refreshOrdersBtn = document.getElementById("refresh-orders");
 if (refreshOrdersBtn) refreshOrdersBtn.addEventListener("click", loadOrders);
 
 const statusFilterEl = document.getElementById("status-filter");
 if (statusFilterEl) statusFilterEl.addEventListener("change", loadOrders);
+
+// ==================== EXCEL EKSPORT - YANGI FUNKSIYA ====================
+const exportExcelBtn = document.getElementById("export-excel-btn");
+if (exportExcelBtn) {
+  exportExcelBtn.addEventListener("click", async () => {
+    const statusFilter = document.getElementById("status-filter");
+    const status = statusFilter ? statusFilter.value : "";
+    const qs = status ? `?status=${status}` : "";
+    exportExcelBtn.innerText = "⏳ Yuklanmoqda...";
+    exportExcelBtn.disabled = true;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/orders/export${qs}`, {
+        headers: { "X-Admin-Password": getPassword() }
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(()=>({detail:"Xatolik"}));
+        throw new Error(err.detail || "Export xatosi");
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const disposition = res.headers.get("Content-Disposition") || "";
+      let filename = `buyurtmalar_${new Date().toISOString().slice(0,10)}.xlsx`;
+      const match = disposition.match(/filename=([^;]+)/);
+      if (match) filename = match[1].replace(/"/g,"");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("Excel eksport xatosi: " + e.message);
+    } finally {
+      exportExcelBtn.innerText = "📊 Excel Yuklash";
+      exportExcelBtn.disabled = false;
+    }
+  });
+}
 
 // ==================== QO'LDA CHIPTA QO'SHISH VA RO'YXAT ====================
 async function loadFlights() {
@@ -343,7 +434,7 @@ function renderFlights(flights) {
   if (!list) return;
   list.innerHTML = "";
   if (!flights || !flights.length) {
-    list.innerHTML = `<div class="a-empty"><div class="empty-icon">✈️</div>Hali chiptalar qo'shilmagan.</div>`;
+    list.innerHTML = `<div class="a-empty"><div class="empty-icon">✈️</div><p style="margin-top:8px;">Hali chiptalar qo'shilmagan.</p><p class="a-text">Yuqoridagi forma orqali yangi chipta qo'shing — u Mini Appda eng yuqori o'rinda chiqadi.</p></div>`;
     return;
   }
   flights.forEach(f => {
@@ -354,12 +445,16 @@ function renderFlights(flights) {
     card.innerHTML = `
       <div>
         <div class="flight-route-title">✈️ ${origin} ➔ ${destination}</div>
-        <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
-          📅 ${f.depart_date || ""} ${f.departure_time || ""} | 🛫 ${f.airline || ""} (${f.flight_number || "-"}) | 💺 O'rindiqlar: <strong>${f.seats_available ?? "Ko'p"}</strong>
+        <div style="font-size: 13px; color: var(--text-muted); margin-top: 6px; line-height:1.4;">
+          📅 ${f.depart_date || ""} ${f.departure_time || ""} | 🛫 ${f.airline || ""} (${f.flight_number || "-"})<br>
+          💺 O'rindiqlar: <strong>${f.seats_available ?? "Ko'p"}</strong> | 🔄 ${f.transfers ?? 0} tranzit | ${f.is_active ? "✅ Faol" : "⏸ Nofaol"}
         </div>
       </div>
       <div style="display: flex; align-items: center; gap: 14px;">
-        <div style="font-size: 20px; font-weight: 800; color: var(--primary);">$${f.price ?? 0}</div>
+        <div style="text-align:right;">
+          <div style="font-size: 20px; font-weight: 800; color: var(--primary);">$${f.price ?? 0}</div>
+          <div style="font-size:10px; color:var(--text-muted);">USD</div>
+        </div>
         <button class="flight-del-btn" data-id="${f.id}">🗑 O'chirish</button>
       </div>
     `;
@@ -367,15 +462,7 @@ function renderFlights(flights) {
   });
 
   list.querySelectorAll(".flight-del-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      if (!confirm("Ushbu chiptani o'chirmoqchimisiz?")) return;
-      try {
-        await apiFetch(`/api/admin/flights/${btn.dataset.id}`, { method: "DELETE" });
-        loadFlights();
-      } catch (e) {
-        alert("O'chirishda xatolik: " + e.message);
-      }
-    });
+    btn.addEventListener("click", () => openDeleteModal("flight", btn.dataset.id));
   });
 }
 
@@ -409,6 +496,8 @@ if (addFlightBtn) {
       flight_number: document.getElementById("f_flight_number").value || null,
     };
 
+    addFlightBtn.innerText = "⏳ Saqlanmoqda...";
+    addFlightBtn.disabled = true;
     try {
       await apiFetch("/api/admin/flights", {
         method: "POST",
@@ -428,6 +517,9 @@ if (addFlightBtn) {
       loadFlights();
     } catch (e) {
       alert("Xatolik: " + e.message);
+    } finally {
+      addFlightBtn.innerText = "💾 Chiptani Saqlash va E'lon Qilish";
+      addFlightBtn.disabled = false;
     }
   });
 }
@@ -443,3 +535,8 @@ function closeImgModal() {
   const modal = document.getElementById("imgModal");
   if (modal) modal.classList.add("hidden");
 }
+
+// Close modals on Escape
+document.addEventListener("keydown", (e)=>{
+  if(e.key==="Escape"){ closeImgModal(); closeDeleteModal(); }
+});
