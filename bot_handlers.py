@@ -31,9 +31,14 @@ def get_main_keyboard():
             )
         ])
     
-    # 2. Viza va Aloqa
+    # 2. Mening Chiptalarim va Viza
     buttons.append([
-        InlineKeyboardButton(text="📑 Viza Xizmatlari", callback_data="bot_menu_visa"),
+        InlineKeyboardButton(text="🗂 Mening Chiptalarim", callback_data="bot_my_orders"),
+        InlineKeyboardButton(text="📑 Viza Xizmatlari", callback_data="bot_menu_visa")
+    ])
+
+    # 3. Aloqa
+    buttons.append([
         InlineKeyboardButton(text="📞 Bog'lanish (@nuriddinovdfg)", callback_data="bot_menu_contact")
     ])
     
@@ -49,7 +54,7 @@ async def cmd_start(message: Message):
     welcome_text = (
         f"✈️ <b>Saudiya Biletlar Botiga xush kelibsiz, {user_name}!</b>\n\n"
         f"🕋 Umra va Ziyorat reyslari uchun eng hamyonbop aviachiptalar.\n"
-        f"⚡️ Ticket band qilish va tezkor viza xizmati.\n\n"
+        f"⚡️ Ticket band qilish, elektron chiptalar va tezkor viza xizmati.\n\n"
         f"Pastdagi <b>«✈️ Aviabiletlarni Qidirish»</b> tugmasi orqali barcha reyslar va narxlarni ko'rishingiz mumkin!"
     )
     
@@ -58,6 +63,56 @@ async def cmd_start(message: Message):
         reply_markup=get_main_keyboard(),
         parse_mode="HTML"
     )
+
+
+# ==================== MENING CHIPTALARIM (/myorders) ====================
+
+@router.message(Command("myorders"))
+@router.callback_query(F.data == "bot_my_orders")
+async def cb_my_orders(event: Message | CallbackQuery):
+    user_id = event.from_user.id
+    
+    try:
+        res = db.supabase.table("orders").select("*, passports(*)").eq("telegram_user_id", user_id).order("id", desc=True).limit(5).execute()
+        orders = res.data or []
+    except Exception as e:
+        orders = []
+
+    if not orders:
+        text = (
+            "📭 <b>Sizda hali buyurtmalar mavjud emas.</b>\n\n"
+            "Chipta xarid qilish uchun pastdagi «✈️ Aviabiletlarni Qidirish» tugmasidan foydalaning."
+        )
+    else:
+        text = "🗂 <b>SIZNING BUYURTMALARINGIZ TARIXI:</b>\n\n"
+        STATUS_MAP = {
+            "new": "🆕 Yangi (Ko'rib chiqilmoqda)",
+            "awaiting_confirmation": "⏳ To'lov cheki tasdiqlanmoqda",
+            "confirmed": "✅ Tasdiqlangan (Chipta yuborilgan)",
+            "rejected": "❌ Rad etilgan"
+        }
+        for o in orders:
+            passport = (o.get("passports") and o["passports"][0]) or {}
+            st = STATUS_MAP.get(o.get("status"), o.get("status"))
+            text += (
+                f"🎫 <b>Buyurtma #{o['id']}</b>\n"
+                f"   ✈️ {o.get('origin', '').upper()} ➔ {o.get('destination', '').upper()}\n"
+                f"   👤 Yo'lovchi: {passport.get('first_name', '')} {passport.get('last_name', '')}\n"
+                f"   📅 Sana: {o.get('depart_date')} | 💵 ${o.get('price')}\n"
+                f"   📊 Holati: <b>{st}</b>\n"
+                f"   ──────────────\n"
+            )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✈️ Yangi Bilet Qidirish", callback_data="bot_main_menu")],
+        [InlineKeyboardButton(text="💬 Adminga Yozish", url=f"https://t.me/{ADMIN_TG}")]
+    ])
+
+    if isinstance(event, CallbackQuery):
+        await event.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        await event.answer()
+    else:
+        await event.answer(text, reply_markup=kb, parse_mode="HTML")
 
 
 # ==================== CALLBACKS ====================
