@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Saudiya Biletlar — Aviabilet & Viza</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=8">
+</head>
+<body class="tg-body">
+
+  <!-- HEADER -->
+  <header class="tg-header">
+    <div class="tg-header-pattern"></div>
+    <div class="tg-header-inner">
+      <div class="tg-badge">
+        <span class="tg-badge-icon">✈️</span>
+      </div>
+      <div style="flex: 1;">
+        <div class="tg-header-tag">🇸🇦 SAUDIYA BILETLAR BOT</div>
+        <h1 class="tg-title">Saudiya Biletlar</h1>
+        <p class="tg-subtitle">Umra va Ziyorat reyslari uchun hamyonbop chiptalar</p>
+      </div>
+
+      <!-- Valyuta O'zgartirgich (USD / UZS) -->
+      <div class="tg-currency-toggle" id="currency-toggle" title="Valyutani almashtirish">
+        <button class="tg-curr-btn active" data-curr="USD">$ USD</button>
+        <button class="tg-curr-btn" data-curr="UZS">So'm</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 5 TA ASOSIY BO'LIM -->
+  <nav class="tg-nav-tabs">
+    <button class="tg-tab-btn active" data-tab="tab-search">✈️ Aviabiletlar</button>
+    <button class="tg-tab-btn" data-tab="tab-calc">🧮 Kalkulyator</button>
+    <button class="tg-tab-btn" data-tab="tab-orders">🗂 Chiptalarim</button>
+    <button class="tg-tab-btn" data-tab="tab-visa">📑 Viza</button>
+    <button class="tg-tab-btn" data-tab="tab-contacts">📞 Aloqa</button>
+  </nav>
+
+  <main id="app" class="tg-main">
+
+    <!-- ==================== 1. AVIABILETLAR ==================== -->
+    <div id="tab-search" class="tab-pane active">
+      
+      <!-- SCREEN 1: Qidiruv Formasi -->
+      <section id="screen-search" class="tg-screen">
+        <div class="tg-card">
+          <div class="tg-card-header">
+            <h2 class="tg-card-title">🔍 Aviachiptalarni Qidirish</h2>
+            <p class="tg-text-muted">Barcha aviakompaniyalarning eng arzon narxlari</p>
+          </div>
+
+          <label class="tg-label">Qayerdan (Uchish shahri)</label>
+          <div class="tg-autocomplete">
+            <input id="origin" type="text" class="tg-input" placeholder="Toshkent (TAS)" autocomplete="off">
+            <input type="hidden" id="origin_code" value="TAS">
+            <div id="origin_suggestions" class="tg-suggestions hidden"></div>
+          </div>
+
+          <label class="tg-label">Qayerga (Qo'nish shahri)</label>
+          <div class="tg-autocomplete">
+            <input id="destination" type="text" class="tg-input" placeholder="Jidda (JED)" autocomplete="off">
+            <input type="hidden" id="destination_code" value="JED">
+            <div id="destination_suggestions" class="tg-suggestions hidden"></div>
+          </div>
+
+          <div class="tg-grid-2">
+            <div>
+              <label class="tg-label">Jo'nash sanasi</label>
+              <input id="depart_date" type="date" class="tg-input">
+            </div>
+            <div>
+              <label class="tg-label">Yo'lovchilar soni</label>
+              <input id="passengers" type="number" min="1" max="9" value="1" class="tg-input">
+            </div>
+          </div>
+
+          <!-- Tezkor tanlov tugmalari -->
+          <div class="tg-quick-routes">
+            <span class="tg-quick-label">Ommabop yo'nalishlar:</span>
+            <div class="tg-quick-chips">
+              <button type="button" class="tg-chip" onclick="setRoute('TAS', 'Toshkent', 'JED', 'Jidda')">TAS ➔ JED</button>
+              <button type="button" class="tg-chip" onclick="setRoute('TAS', 'Toshkent', 'MED', 'Madina')">TAS ➔ MED</button>
+              <button type="button" class="tg-chip" onclick="setRoute('NMA', 'Namangan', 'JED', 'Jidda')">NMA ➔ JED</button>
+              <button type="button" class="tg-chip" onclick="setRoute('SKD', 'Samarqand', 'MED', 'Madina')">SKD ➔ MED</button>
+              <button type="button" class="tg-chip" onclick="setRoute('FEG', 'Farg`ona', 'JED', 'Jidda')">FEG ➔ JED</button>
+            </div>
+          </div>
+
+          <button id="btn-search" class="tg-btn-primary">
+            <span>✈️ Barcha Chiptalarni Qidirish</span>
+          </button>
+        </div>
+
+        <p class="tg-hint">⚡️ Real vaqtda barcha reyslar va narxlar tekshiriladi.</p>
+      </section>
+
+      <!-- SCREEN 2: Ko'p sonli chiptalar natijasi -->
+      <section id="screen-results" class="tg-screen hidden">
+        <div class="tg-results-header">
+          <button class="tg-back" data-back="screen-search">← Qidiruvga qaytish</button>
+          <div id="results-count-badge" class="tg-results-count">Mavjud reyslar</div>
+        </div>
+
+        <div id="results-list" class="tg-list"></div>
+
+        <div id="results-empty" class="tg-empty hidden">
+          <div class="empty-icon">✈️</div>
+          <h3>Ushbu sanada reyslar topilmadi</h3>
+          <p>Boshqa sanani tanlang yoki operatorimiz bilan bog'laning:</p>
+          <a href="https://t.me/nuriddinovdfg" target="_blank" class="tg-btn-secondary" style="display:inline-block; margin-top:12px; text-decoration:none;">💬 Adminga Yozish (@nuriddinovdfg)</a>
+        </div>
+      </section>
+
+      <!-- SCREEN 3: Pasport -->
+      <section id="screen-passport" class="tg-screen hidden">
+        <button class="tg-back" data-back="screen-results">← Reyslarga qaytish</button>
+        <div class="tg-card" id="selected-flight-summary"></div>
+
+        <div class="tg-card">
+          <h2 class="tg-card-title">🛂 Yo'lovchi Pasport Ma'lumotlari</h2>
+          <p class="tg-text-muted" style="margin-bottom: 12px;">Xorijga chiqish (zagran) pasportingizni kiriting:</p>
+
+          <div class="tg-grid-2">
+            <div>
+              <label class="tg-label">Ism (Lotincha)</label>
+              <input id="p_first_name" class="tg-input" placeholder="ALISHER" style="text-transform: uppercase;">
+            </div>
+            <div>
+              <label class="tg-label">Familiya (Lotincha)</label>
+              <input id="p_last_name" class="tg-input" placeholder="QODIROV" style="text-transform: uppercase;">
+            </div>
+          </div>
+
+          <div class="tg-grid-2">
+            <div>
+              <label class="tg-label">Pasport seriya/raqam</label>
+              <input id="p_number" class="tg-input" placeholder="FA1234567" style="text-transform: uppercase;">
+            </div>
+            <div>
+              <label class="tg-label">Tug'ilgan yil</label>
+              <input id="p_birth_year" type="number" class="tg-input" placeholder="1990">
+            </div>
+          </div>
+
+          <label class="tg-label">Pasport amal qilish muddati</label>
+          <input id="p_expiry" type="date" class="tg-input">
+
+          <button id="btn-to-payment" class="tg-btn-primary">Davom etish (To'lovga o'tish) ➔</button>
+        </div>
+      </section>
+
+      <!-- SCREEN 4: To'lov -->
+      <section id="screen-payment" class="tg-screen hidden">
+        <button class="tg-back" data-back="screen-passport">← Pasportga qaytish</button>
+        <div class="tg-card">
+          <h2 class="tg-card-title">💳 To'lovni Amalga Oshirish</h2>
+          <p class="tg-text">Quyidagi karta hisobiga to'lov qiling va chek skrinshotini yuklang:</p>
+          
+          <div class="tg-card-box">
+            <div class="tg-card-chip">💳 UZCARD / HUMO / VISA</div>
+            <div class="tg-card-number" id="card-number">8600 0000 0000 0000</div>
+            <div class="tg-card-owner" id="card-owner">Karta egasi: SAUDIYA BILETLAR</div>
+          </div>
+
+          <label class="tg-label">To'lov cheki (Skrinshot)</label>
+          <input id="payment_file" type="file" accept="image/*" class="tg-input">
+          <img id="payment_preview" class="tg-preview hidden">
+
+          <button id="btn-submit-order" class="tg-btn-primary">✅ Buyurtmani Tasdiqlashga Yuborish</button>
+        </div>
+      </section>
+
+      <!-- SCREEN 5: Muvaffaqiyat -->
+      <section id="screen-success" class="tg-screen hidden">
+        <div class="tg-card tg-success">
+          <div class="tg-success-icon">🎉</div>
+          <h2 class="tg-card-title">Buyurtmangiz Qabul Qilindi!</h2>
+          <p class="tg-text">Buyurtma raqamingiz: <strong>#<span id="success-order-id"></span></strong></p>
+          <p class="tg-text-muted" style="margin: 12px 0;">To'lov tasdiqlangandan so'ng xalqaro elektron PDF chiptangiz ushbu bot orqali yuboriladi.</p>
+          <button id="btn-new-order" class="tg-btn-secondary">🔄 Yangi Qidiruv</button>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ==================== 2. VALYUTA & NARX KALKULYATORI ==================== -->
+    <div id="tab-calc" class="tab-pane">
+      <div class="tg-card">
+        <div class="tg-card-header">
+          <h2 class="tg-card-title">🧮 Narx & Valyuta Hisoblagich</h2>
+          <p class="tg-text-muted">Chipta narxi, valyuta kursi va yo'lovchilar soni bo'yicha jami summani hisoblang</p>
+        </div>
+
+        <!-- 1. USD NARXI (Tepada) -->
+        <label class="tg-label">Chipta narxi ($ USD)</label>
+        <input id="calc_price" type="number" min="0" step="1" class="tg-input" value="380" placeholder="380" oninput="calculateCustomFare()">
+
+        <!-- 2. SO'M KURSI (O'rtada) -->
+        <label class="tg-label">1 USD ning so'm kursi (UZS)</label>
+        <input id="calc_rate" type="number" min="0" step="10" class="tg-input" value="12850" placeholder="12850" oninput="calculateCustomFare()">
+
+        <!-- 3. YO'LOVCHILAR SONI (Eng pastida) -->
+        <label class="tg-label">Yo'lovchilar soni</label>
+        <input id="calc_passengers" type="number" min="1" max="100" class="tg-input" value="1" placeholder="1" oninput="calculateCustomFare()">
+
+        <div class="tg-calc-result-box">
+          <div class="tg-calc-row">
+            <span>Jami summa ($ USD):</span>
+            <strong id="calc-res-usd" style="color: var(--accent-gold); font-size: 20px;">$380</strong>
+          </div>
+          <div class="tg-calc-row">
+            <span>Jami summa (So'mda):</span>
+            <strong id="calc-res-uzs" style="color: #fff; font-size: 22px;">4 883 000 UZS</strong>
+          </div>
+        </div>
+
+        <p class="tg-hint">Kurs Markaziy Bankning taxminiy o'rtacha kursi bo'yicha ko'rsatilmoqda.</p>
+      </div>
+    </div>
+
+    <!-- ==================== 3. MENING CHIPTALARIM ==================== -->
+    <div id="tab-orders" class="tab-pane">
+      <div class="tg-card-header flex-between">
+        <h2 class="tg-section-title">🗂 Mening Buyurtmalarim</h2>
+        <button class="tg-btn-secondary" style="width: auto; padding: 6px 12px; font-size: 11px;" onclick="loadUserOrders()">🔄 Yangilash</button>
+      </div>
+      
+      <div id="user-orders-list" class="tg-list"></div>
+      <div id="user-orders-empty" class="tg-empty hidden">
+        <div class="empty-icon">📭</div>
+        <h3>Hozircha buyurtmalaringiz yo'q</h3>
+        <p>Aviachipta xarid qilish uchun «Aviabiletlar» bo'limiga o'ting.</p>
+      </div>
+    </div>
+
+    <!-- ==================== 4. VIZA XIZMATI ==================== -->
+    <div id="tab-visa" class="tab-pane">
+      <div class="tg-section-header">
+        <h2 class="tg-section-title">📑 Saudiya Viza Xizmatlari</h2>
+        <p class="tg-section-desc">Tezkor, rasmiy va kafolatlangan viza rasmiylashtirish</p>
+      </div>
+
+      <div class="tg-service-card">
+        <div class="tg-srv-info">
+          <h3>📌 1 Yillik Multi Turistik Viza</h3>
+          <p>⏳ Amal qilish muddati: <strong>1 yil (har safar 90 kungacha)</strong></p>
+          <p>⏱ Tayyor bo'lish vaqti: <strong>24 – 48 soat ichida</strong></p>
+          <p>📄 Kerakli hujjat: Zagran pasport nusxasi va rasm</p>
+        </div>
+        <div class="tg-srv-action">
+          <a href="https://t.me/nuriddinovdfg?text=Assalomu%20alaykum!%201%20yillik%20Multi-viza%20rasmiylashtirmoqchiman" target="_blank" class="tg-btn-primary">✍️ Rasmiylashtirish</a>
+        </div>
+      </div>
+
+      <div class="tg-service-card">
+        <div class="tg-srv-info">
+          <h3>📌 Rasmiy Umra Vizasi (Nusuk)</h3>
+          <p>⏳ Amal qilish muddati: <strong>90 kunlik rasmiy ziyorat</strong></p>
+          <p>⏱ Tayyor bo'lish vaqti: <strong>1 – 3 ish kuni</strong></p>
+          <p>📄 Kerakli hujjat: Pasport, tibbiy sug'urta va rasm</p>
+        </div>
+        <div class="tg-srv-action">
+          <a href="https://t.me/nuriddinovdfg?text=Assalomu%20alaykum!%20Rasmiy%20Umra%20vizasi%20rasmiylashtirmoqchiman" target="_blank" class="tg-btn-primary">✍️ Rasmiylashtirish</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 5. BOG'LANISH / ALOQA ==================== -->
+    <div id="tab-contacts" class="tab-pane">
+      <div class="tg-card">
+        <h2 class="tg-card-title">📞 Biz Bilan Bog'lanish</h2>
+        <p class="tg-text-muted" style="margin-bottom: 16px;">Savollaringiz bormi yoki bilet band qilmoqchimisiz? Operatorimiz 24/7 aloqada!</p>
+
+        <div class="tg-contact-item">
+          <div class="tg-contact-icon">👤</div>
+          <div>
+            <span class="tg-contact-label">BOSH OPERATOR / ADMIN</span>
+            <strong>@nuriddinovdfg</strong>
+          </div>
+        </div>
+
+        <div class="tg-contact-item">
+          <div class="tg-contact-icon">🤖</div>
+          <div>
+            <span class="tg-contact-label">RASMIY TELEGRAM BOT</span>
+            <strong>@Saudiya_Biletlarbot</strong>
+          </div>
+        </div>
+
+        <a href="https://t.me/nuriddinovdfg" target="_blank" class="tg-btn-primary" style="display:block; text-align:center; text-decoration:none; margin-top:20px;">
+          💬 To'g'ridan-to'g'ri Adminga Yozish (@nuriddinovdfg)
+        </a>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="app.js?v=8"></script>
+</body>
+</html>

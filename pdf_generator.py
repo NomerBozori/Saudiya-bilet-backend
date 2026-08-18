@@ -1,8 +1,12 @@
 import io
+import json
+
+from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
-from reportlab.lib import colors
+
+from config import settings
 
 
 def generate_ticket_pdf(order: dict, passport: dict) -> bytes:
@@ -18,6 +22,8 @@ def generate_ticket_pdf(order: dict, passport: dict) -> bytes:
     TEXT_DARK = colors.HexColor("#0F172A")
     TEXT_MUTED = colors.HexColor("#64748B")
     BORDER_COLOR = colors.HexColor("#E2E8F0")
+
+    order_id = int(order.get("id") or 0)
 
     # 1. Asosiy fon va sarlavha paneli
     c.setFillColor(PRIMARY)
@@ -36,19 +42,28 @@ def generate_ticket_pdf(order: dict, passport: dict) -> bytes:
     c.drawString(1.8 * cm, height - 2.4 * cm, "Saudiya Aviabiletlari & Umra Xizmatlari Rasmiy Tasdiqnomasi")
 
     c.setFont("Helvetica-Bold", 10)
-    c.drawRightString(width - 1.8 * cm, height - 1.6 * cm, f"E-TICKET: #{order['id']:06d}")
+    c.drawRightString(width - 1.8 * cm, height - 1.6 * cm, f"E-TICKET: #{order_id:06d}")
     c.setFont("Helvetica", 9)
     c.drawRightString(width - 1.8 * cm, height - 2.4 * cm, "STATUS: CONFIRMED / TASDIQLANGAN")
 
     y = height - 4.8 * cm
 
     # 2. Reys yo'nalishi banneri (TAS ➔ JED)
-    origin = str(order.get('origin', '-')).upper()
-    destination = str(order.get('destination', '-')).upper()
-    depart_date = str(order.get('depart_date', '-'))
+    origin = str(order.get("origin") or "-").upper()
+    destination = str(order.get("destination") or "-").upper()
+    depart_date = str(order.get("depart_date") or "-")
+    
     flight = order.get("flight_data") or {}
-    airline = str(flight.get("airline", "Umra Chipta"))
-    flight_num = str(flight.get("flight_number", "SAU-777"))
+    if isinstance(flight, str):
+        try:
+            flight = json.loads(flight)
+        except (json.JSONDecodeError, TypeError):
+            flight = {}
+    elif not isinstance(flight, dict):
+        flight = {}
+
+    airline = str(flight.get("airline") or "Saudiya Biletlar")
+    flight_num = str(flight.get("flight_number") or "SAU-777")
 
     # Kartochka foni
     c.setFillColor(BG_LIGHT)
@@ -61,7 +76,7 @@ def generate_ticket_pdf(order: dict, passport: dict) -> bytes:
     
     c.setFillColor(ACCENT)
     c.setFont("Helvetica-Bold", 20)
-    c.drawString(6.0 * cm, y - 1.2 * cm, "✈ ➔")
+    c.drawString(6.0 * cm, y - 1.2 * cm, "->")
 
     c.setFillColor(PRIMARY_DARK)
     c.setFont("Helvetica-Bold", 24)
@@ -93,11 +108,18 @@ def generate_ticket_pdf(order: dict, passport: dict) -> bytes:
     c.drawString(2.0 * cm, y - 1.9 * cm, "Tug'ilgan yili:")
     c.drawString(2.0 * cm, y - 2.5 * cm, "Amal qilish muddati:")
 
+    first_n = (passport.get("first_name") or "").strip()
+    last_n = (passport.get("last_name") or "").strip()
+    full_name = f"{first_n} {last_n}".strip().upper() or "-"
+    passport_num = str(passport.get("passport_number") or "-").upper()
+    birth_year = str(passport.get("birth_year") or "-")
+    expiry_date = str(passport.get("expiry_date") or "-")
+
     c.setFont("Helvetica", 10)
-    c.drawString(8.0 * cm, y - 0.7 * cm, f"{passport.get('first_name', '')} {passport.get('last_name', '')}".upper())
-    c.drawString(8.0 * cm, y - 1.3 * cm, str(passport.get('passport_number', '-')).upper())
-    c.drawString(8.0 * cm, y - 1.9 * cm, str(passport.get('birth_year', '-')))
-    c.drawString(8.0 * cm, y - 2.5 * cm, str(passport.get('expiry_date', '-')))
+    c.drawString(8.0 * cm, y - 0.7 * cm, full_name)
+    c.drawString(8.0 * cm, y - 1.3 * cm, passport_num)
+    c.drawString(8.0 * cm, y - 1.9 * cm, birth_year)
+    c.drawString(8.0 * cm, y - 2.5 * cm, expiry_date)
 
     y -= 3.8 * cm
 
@@ -120,14 +142,16 @@ def generate_ticket_pdf(order: dict, passport: dict) -> bytes:
     c.drawString(2.0 * cm, y - 3.1 * cm, "Jami to'langan summa:")
 
     c.setFont("Helvetica", 10)
-    c.drawString(8.0 * cm, y - 0.7 * cm, f"#{order['id']}")
-    c.drawString(8.0 * cm, y - 1.3 * cm, f"{order.get('passengers', 1)} kishi")
+    c.drawString(8.0 * cm, y - 0.7 * cm, f"#{order_id}")
+    c.drawString(8.0 * cm, y - 1.3 * cm, f"{order.get('passengers') or 1} kishi")
     c.drawString(8.0 * cm, y - 1.9 * cm, "30 kg (Bagaj) + 7 kg (Qo'l yuki)")
     c.drawString(8.0 * cm, y - 2.5 * cm, "Ekonom / Umra Charter")
     
     c.setFont("Helvetica-Bold", 11)
     c.setFillColor(PRIMARY)
-    c.drawString(8.0 * cm, y - 3.1 * cm, f"{order.get('price', '-')} USD (TO'LANGAN / PAID)")
+    price_val = order.get("price")
+    price_str = f"${price_val}" if price_val is not None else "-"
+    c.drawString(8.0 * cm, y - 3.1 * cm, f"{price_str} USD (TO'LANGAN / PAID)")
 
     y -= 4.4 * cm
 
@@ -137,13 +161,14 @@ def generate_ticket_pdf(order: dict, passport: dict) -> bytes:
     c.drawString(1.5 * cm, y, "MUHIM ESLATMALAR / IMPORTANT NOTICE:")
     y -= 0.5 * cm
 
+    admin_username = getattr(settings, "ADMIN_USERNAME", "nuriddinovdfg")
     c.setFillColor(TEXT_MUTED)
     c.setFont("Helvetica", 8)
     notices = [
         "1. Aeroportga parvozdan kamida 3 soat oldin yetib kelishingiz shart.",
         "2. Pasportingizning amal qilish muddati Saudiya Arabistoniga kirish sanasidan kamida 6 oy bo'lishi lozim.",
         "3. Har bir yo'lovchi o'zi bilan elektron viza nusxasi va ushbu aviachiptani olib yurishi tavsiya etiladi.",
-        "4. Savollar yoki transfer xizmatlari uchun Telegram: @Saudiya_Admin orqali bog'lanishingiz mumkin."
+        f"4. Savollar yoki transfer xizmatlari uchun Telegram: @{admin_username} orqali bog'lanishingiz mumkin."
     ]
     for n in notices:
         c.drawString(1.5 * cm, y, n)
@@ -155,7 +180,7 @@ def generate_ticket_pdf(order: dict, passport: dict) -> bytes:
     c.setFont("Helvetica-Oblique", 8)
     c.setFillColor(TEXT_MUTED)
     c.drawString(1.5 * cm, 1.3 * cm, "Saudiya Biletlari & Umra Xizmatlari — Rasmiy Elektron Tizim")
-    c.drawRightString(width - 1.5 * cm, 1.3 * cm, "www.saudiyabiletlari.uz")
+    c.drawRightString(width - 1.5 * cm, 1.3 * cm, "Saudiya Biletlari")
 
     c.showPage()
     c.save()

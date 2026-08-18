@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     BOT_TOKEN: str
     ADMIN_CHAT_ID: int          # Admin guruh/kanal chat ID (masalan -1001234567890)
     CHANNEL_ID: int             # Kunlik post yuboriladigan kanal ID
+    ADMIN_USERNAME: str = "nuriddinovdfg"
 
     # Supabase
     SUPABASE_URL: str

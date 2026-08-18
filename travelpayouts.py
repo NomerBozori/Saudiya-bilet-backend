@@ -1,5 +1,10 @@
+import logging
+
 import httpx
+
 from config import settings
+
+log = logging.getLogger("travelpayouts")
 
 # Shahar nomlaridan IATA kodlariga moslashtirish
 IATA = {
@@ -7,7 +12,7 @@ IATA = {
     "tashkent": "TAS", "toshkent": "TAS", "tas": "TAS",
     "samarkand": "SKD", "samarqand": "SKD", "skd": "SKD",
     "bukhara": "BHK", "buxoro": "BHK", "bhk": "BHK",
-    "fergana": "FEG", "fargona": "FEG", "farg'ona": "FEG", "feg": "FEG",
+    "fergana": "FEG", "fargona": "FEG", "farg'ona": "FEG", "fargʻona": "FEG", "fargʼona": "FEG", "feg": "FEG",
     "namangan": "NMA", "nma": "NMA",
     "andijan": "AZN", "andijon": "AZN", "azn": "AZN",
     "nukus": "NCU", "ncu": "NCU",
@@ -18,10 +23,18 @@ IATA = {
 
     # Saudiya Arabistoni
     "jeddah": "JED", "jidda": "JED", "jed": "JED",
-    "madinah": "MED", "madina": "MED", "med": "MED",
-    "riyadh": "RUH", "riyod": "RUH", "ar-riyod": "RUH", "ruh": "RUH",
+    "madinah": "MED", "madina": "MED", "medina": "MED", "med": "MED",
+    "riyadh": "RUH", "riyod": "RUH", "ar-riyod": "RUH", "ar-riyadh": "RUH", "ruh": "RUH",
     "dammam": "DMM", "dmm": "DMM",
     "taif": "TIF", "toif": "TIF", "tif": "TIF",
+
+    # Boshqa mashhur tranzit yo'nalishlar
+    "dubai": "DXB", "dubay": "DXB", "dxb": "DXB",
+    "sharjah": "SHJ", "sharja": "SHJ", "shj": "SHJ",
+    "abu dhabi": "AUH", "abu-dhabi": "AUH", "abu dabi": "AUH", "auh": "AUH",
+    "istanbul": "IST", "ist": "IST", "saw": "SAW",
+    "kuwait": "KWI", "quvayt": "KWI", "kwi": "KWI",
+    "doha": "DOH", "doh": "DOH",
 }
 
 PRICES_FOR_DATES_URL = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates"
@@ -38,7 +51,7 @@ def to_iata(city: str) -> str:
 def _apply_markup(price):
     """API'dan kelgan narxga foyda ustamasini (MARKUP_PERCENT) qo'shadi."""
     if price is None:
-        return price
+        return None
     try:
         marked_up = float(price) * (1 + settings.MARKUP_PERCENT / 100)
         return round(marked_up, 2)
@@ -50,20 +63,25 @@ def _build_affiliate_link(raw_link: str) -> str:
     """Aviasales havolasiga marker qo'shadi, shunda buyurtmadan komissiya sizga hisoblanadi."""
     if not raw_link:
         return ""
-    base = f"https://www.aviasales.com{raw_link}"
+    base = f"https://www.aviasales.com{raw_link}" if not raw_link.startswith("http") else raw_link
+    marker = settings.TRAVELPAYOUTS_MARKER or ""
+    if not marker:
+        return base
     sep = "&" if "?" in base else "?"
-    return f"{base}{sep}marker={settings.TRAVELPAYOUTS_MARKER}"
+    return f"{base}{sep}marker={marker}"
 
 
 async def search_flights(origin_city: str, destination_city: str, depart_date: str, limit: int = 15) -> list[dict]:
     """Belgilangan sana uchun mavjud chiptalarni qidiradi (narx bo'yicha saralangan)."""
     origin = to_iata(origin_city)
     destination = to_iata(destination_city)
+    if not origin or not destination:
+        return []
 
     params = {
         "origin": origin,
         "destination": destination,
-        "departure_at": depart_date,
+        "departure_at": depart_date.strip(),
         "sorting": "price",
         "direct": "false",
         "currency": "usd",
@@ -75,7 +93,8 @@ async def search_flights(origin_city: str, destination_city: str, depart_date: s
 
     async with httpx.AsyncClient(timeout=20) as client:
         r = await client.get(PRICES_FOR_DATES_URL, params=params)
-        r.raise_for_status()
+        if r.status_code != 200:
+            return []
         payload = r.json()
 
     results = []
@@ -83,11 +102,11 @@ async def search_flights(origin_city: str, destination_city: str, depart_date: s
         original_price = item.get("price")
         marked_up_price = _apply_markup(original_price)
         results.append({
-            "origin": item.get("origin"),
-            "destination": item.get("destination"),
+            "origin": item.get("origin") or origin,
+            "destination": item.get("destination") or destination,
             "price": marked_up_price,
-            "airline": item.get("airline"),
-            "flight_number": item.get("flight_number"),
+            "airline": item.get("airline") or "Aviakompaniya",
+            "flight_number": item.get("flight_number") or "",
             "departure_at": item.get("departure_at"),
             "return_at": item.get("return_at"),
             "transfers": item.get("transfers", 0),
@@ -110,13 +129,21 @@ async def get_daily_cheapest(origin_city: str = "tashkent") -> list[dict]:
                 "token": settings.TRAVELPAYOUTS_TOKEN,
                 "marker": settings.TRAVELPAYOUTS_MARKER,
             }
-            r = await client.get(LATEST_PRICES_URL, params=params)
-            if r.status_code == 200:
-                for item in r.json().get("data", []):
-                    results.append({
-                        "origin": origin,
-                        "destination": dest,
-                        "value": _apply_markup(item.get("value")),
-                        "depart_date": item.get("depart_date"),
-                    })
+            try:
+                r = await client.get(LATEST_PRICES_URL, params=params)
+                if r.status_code == 200:
+                    data = r.json().get("data", [])
+                    if isinstance(data, list):
+                        for item in data:
+                            val = item.get("value")
+                            if val is not None:
+                                results.append({
+                                    "origin": origin,
+                                    "destination": dest,
+                                    "value": _apply_markup(val),
+                                    "depart_date": item.get("depart_date"),
+                                })
+            except Exception as e:
+                log.warning(f"{dest} reys narxlarini olishda xatolik: {e}")
+                continue
     return results
