@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="admin.css?v=3">
+    <link rel="stylesheet" href="admin.css?v=4">
 </head>
 <body>
 
@@ -107,8 +107,9 @@
                                 <label class="a-label">Qidiruv (Ism yoki Pasport):</label>
                                 <input type="text" id="orders-search" class="a-input" placeholder="Qidiruv..." oninput="filterOrdersLocally()">
                             </div>
-                            <div class="a-filter-item flex-end">
+                            <div class="a-filter-item flex-end" style="display:flex; gap:8px;">
                                 <button id="refresh-orders" class="a-btn-secondary">🔄 Yangilash</button>
+                                <button id="export-excel-btn" class="a-btn-excel">📊 Excel Yuklash</button>
                             </div>
                         </div>
                     </div>
@@ -208,6 +209,19 @@
         </div>
     </div>
 
-    <script src="admin.js?v=3"></script>
+    <!-- Delete Confirm Modal -->
+    <div id="deleteConfirmModal" class="modal-backdrop hidden" onclick="closeDeleteModal()">
+        <div class="modal-box delete-modal" onclick="event.stopPropagation()">
+            <div class="delete-icon-wrap">🗑️</div>
+            <h3 id="delete-modal-title">O'chirishni tasdiqlaysizmi?</h3>
+            <p id="delete-modal-desc" class="a-text" style="margin:12px 0 20px; text-align:center;">Bu amalni ortga qaytarib bo'lmaydi.</p>
+            <div style="display:flex; gap:10px;">
+                <button class="a-btn-secondary" style="flex:1;" onclick="closeDeleteModal()">Bekor qilish</button>
+                <button id="delete-confirm-btn" class="a-btn-danger" style="flex:1;">Ha, O'chir</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="admin.js?v=4"></script>
 </body>
 </html>
