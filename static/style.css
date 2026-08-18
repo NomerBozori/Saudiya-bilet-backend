@@ -1,0 +1,515 @@
+:root {
+  --primary: #0F2147;
+  --primary-dark: #070F25;
+  --primary-light: #1E3E62;
+  --accent: #F1C40F;
+  --accent-gold: #D4AF37;
+  --accent-light: #FFF8E1;
+  --bg-page: #0B1426;
+  --bg-card: #132238;
+  --text-dark: #0B192C;
+  --text-muted: #64748B;
+  --border-color: #E2E8F0;
+  --danger: #EF4444;
+  --success: #10B981;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 8px 20px rgba(0,0,0,0.08);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.tg-body {
+  background-color: var(--tg-theme-bg-color, #F4F7FB);
+  color: var(--tg-theme-text-color, var(--text-dark));
+  min-height: 100vh;
+  padding-bottom: 40px;
+}
+
+.hidden { display: none !important; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; }
+
+/* ==================== HEADER ==================== */
+.tg-header {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #070F25 0%, #0F2147 50%, #1E3E62 100%);
+  padding: 20px 16px 18px;
+  color: #fff;
+  border-bottom-left-radius: 22px;
+  border-bottom-right-radius: 22px;
+  box-shadow: 0 6px 20px rgba(7, 15, 37, 0.35);
+}
+
+.tg-header-pattern {
+  position: absolute;
+  inset: 0;
+  opacity: 0.12;
+  background-image: radial-gradient(circle at 20% 20%, #fff 0 2px, transparent 3px),
+                    radial-gradient(circle at 60% 60%, #fff 0 2px, transparent 3px),
+                    radial-gradient(circle at 85% 15%, #fff 0 2px, transparent 3px);
+  background-size: 32px 32px;
+}
+
+.tg-header-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tg-badge {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.12);
+  border: 1.5px solid var(--accent);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tg-badge-icon { font-size: 22px; }
+
+.tg-header-tag {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.6px;
+}
+.tg-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: #fff;
+}
+.tg-subtitle {
+  margin: 1px 0 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: #CBD5E1;
+}
+
+/* CURRENCY TOGGLE */
+.tg-currency-toggle {
+  display: flex;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 20px;
+  padding: 2px;
+}
+.tg-curr-btn {
+  background: transparent;
+  border: none;
+  color: #CBD5E1;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tg-curr-btn.active {
+  background: var(--accent);
+  color: #070F25;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+/* ==================== NAVIGATION TABS ==================== */
+.tg-nav-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px 14px 4px;
+  max-width: 540px;
+  margin: 0 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tg-nav-tabs::-webkit-scrollbar { display: none; }
+
+.tg-tab-btn {
+  flex-shrink: 0;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: var(--tg-theme-secondary-bg-color, #FFFFFF);
+  color: var(--tg-theme-hint-color, var(--text-muted));
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+  white-space: nowrap;
+}
+.tg-tab-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  box-shadow: 0 3px 10px rgba(15, 33, 71, 0.25);
+}
+
+/* ==================== MAIN ==================== */
+.tg-main {
+  padding: 12px 14px;
+  max-width: 540px;
+  margin: 0 auto;
+}
+
+.tab-pane { display: none; }
+.tab-pane.active { display: block; animation: fadeIn 0.2s ease; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==================== CARDS & INPUTS ==================== */
+.tg-card {
+  background: var(--tg-theme-secondary-bg-color, #FFFFFF);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  color: var(--tg-theme-text-color, var(--text-dark));
+}
+
+.tg-card-header { margin-bottom: 14px; }
+.tg-card-title, .tg-section-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--tg-theme-text-color, var(--text-dark));
+  margin-bottom: 3px;
+}
+
+.tg-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--tg-theme-hint-color, var(--text-muted));
+  margin: 12px 0 6px;
+}
+.tg-label:first-child { margin-top: 0; }
+
+.tg-input, .tg-select {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border-color);
+  background: var(--tg-theme-bg-color, #F8FAFC);
+  color: var(--tg-theme-text-color, var(--text-dark));
+  font-size: 15px;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+.tg-input:focus, .tg-select:focus {
+  border-color: var(--primary-light);
+  background: #fff;
+  color: #0B192C;
+}
+
+.tg-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* QUICK ROUTE CHIPS */
+.tg-quick-routes { margin: 14px 0 10px; }
+.tg-quick-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tg-theme-hint-color, var(--text-muted));
+  margin-bottom: 6px;
+}
+.tg-quick-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.tg-chip {
+  background: #F1F5F9;
+  border: 1px solid var(--border-color);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.tg-chip:hover { background: var(--primary); color: #fff; }
+
+/* BUTTONS */
+.tg-btn-primary {
+  width: 100%;
+  margin-top: 14px;
+  padding: 13px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(15, 33, 71, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+.tg-btn-primary:active { opacity: 0.9; transform: translateY(1px); }
+
+.tg-btn-secondary {
+  width: 100%;
+  padding: 10px;
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  text-align: center;
+}
+
+.tg-back {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.tg-hint { text-align: center; font-size: 11px; color: var(--tg-theme-hint-color, var(--text-muted)); margin-top: 10px; }
+.tg-text-muted { font-size: 12px; color: var(--tg-theme-hint-color, var(--text-muted)); line-height: 1.4; }
+.tg-text { font-size: 13.5px; line-height: 1.5; color: var(--tg-theme-text-color, #334155); }
+
+/* ==================== FULL FLIGHT CARDS ==================== */
+.tg-results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.tg-results-count {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--primary);
+  background: #E2E8F0;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.tg-list { display: flex; flex-direction: column; gap: 12px; }
+
+.tg-flight-card {
+  background: var(--tg-theme-secondary-bg-color, #FFFFFF);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+  border-left: 4px solid var(--primary);
+}
+
+.tg-flight-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.tg-flight-airline { display: flex; align-items: center; gap: 8px; }
+.tg-airline-name { font-size: 13.5px; font-weight: 800; color: var(--tg-theme-text-color, var(--text-dark)); }
+.tg-flight-num {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: #F1F5F9;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.tg-flight-price-box { text-align: right; }
+.tg-flight-price { font-size: 20px; font-weight: 800; color: var(--primary); }
+.tg-flight-price-label { font-size: 10px; color: var(--text-muted); }
+
+.tg-flight-route-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--tg-theme-bg-color, #F8FAFC);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  margin-bottom: 10px;
+}
+.tg-route-point { text-align: left; }
+.tg-route-point.right { text-align: right; }
+.tg-point-city { font-size: 14px; font-weight: 800; color: var(--tg-theme-text-color, var(--text-dark)); }
+.tg-point-time { font-size: 12px; font-weight: 700; color: var(--primary); }
+
+.tg-route-middle { text-align: center; }
+.tg-route-duration { font-size: 10px; color: var(--text-muted); font-weight: 700; margin-bottom: 2px; }
+.tg-route-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent-gold);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tg-flight-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 11.5px;
+}
+.tg-f-detail { display: flex; align-items: center; gap: 6px; color: var(--tg-theme-hint-color, #475569); }
+.tg-f-detail strong { color: var(--tg-theme-text-color, var(--text-dark)); }
+
+.tg-badge-tag {
+  display: inline-block;
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+.tag-agency { background: #DCFCE7; color: #15803D; }
+.tag-hot { background: #FEF3C7; color: #D97706; }
+
+/* ==================== CALCULATOR ==================== */
+.tg-calc-result-box {
+  background: linear-gradient(135deg, #070F25 0%, #0F2147 100%);
+  color: #fff;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  margin-top: 16px;
+  box-shadow: 0 4px 12px rgba(7, 15, 37, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.tg-calc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.tg-calc-row:last-child { margin-bottom: 0; }
+.tg-calc-row span { font-size: 13px; color: #CBD5E1; }
+
+/* ==================== USER ORDERS ==================== */
+.tg-user-order-card {
+  background: var(--tg-theme-secondary-bg-color, #FFFFFF);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  border-left: 4px solid var(--primary);
+}
+.tg-order-status-badge {
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 12px;
+}
+.st-new { background: #FEF3C7; color: #B45309; }
+.st-confirmed { background: #DCFCE7; color: #15803D; }
+.st-rejected { background: #FEE2E2; color: #DC2626; }
+
+/* ==================== SERVICES & CONTACTS ==================== */
+.tg-service-card {
+  background: var(--tg-theme-secondary-bg-color, #FFFFFF);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.tg-srv-info h3 { font-size: 14.5px; font-weight: 800; margin-bottom: 4px; color: var(--tg-theme-text-color, var(--text-dark)); }
+.tg-srv-info p { font-size: 12px; color: var(--tg-theme-hint-color, var(--text-muted)); margin-bottom: 2px; }
+.tg-srv-action { text-align: right; }
+
+.tg-contact-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+.tg-contact-item:last-of-type { border-bottom: none; }
+.tg-contact-icon {
+  font-size: 22px;
+  width: 42px;
+  height: 42px;
+  background: #F1F5F9;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tg-contact-label { display: block; font-size: 10px; font-weight: 700; color: var(--tg-theme-hint-color, var(--text-muted)); }
+
+/* ==================== AUTOCOMPLETE & PAYMENT ==================== */
+.tg-autocomplete { position: relative; }
+.tg-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  background: #fff;
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 50;
+  box-shadow: var(--shadow-md);
+}
+.tg-suggestion-item {
+  padding: 10px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 1px solid #F1F5F9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #0B192C;
+}
+.tg-suggestion-item:hover { background: #F8FAFC; }
+.tg-suggestion-code { font-weight: 800; color: var(--primary); }
+
+.tg-card-box {
+  background: linear-gradient(135deg, #070F25 0%, #0F2147 100%);
+  color: #fff;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  margin: 12px 0 16px;
+  box-shadow: 0 4px 12px rgba(7, 15, 37, 0.35);
+}
+.tg-card-chip { font-size: 11px; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
+.tg-card-number { font-size: 18px; font-weight: 800; letter-spacing: 2px; margin-bottom: 6px; }
+.tg-card-owner { font-size: 11.5px; opacity: 0.8; }
+.tg-preview { width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; margin-top: 8px; }
+
+.tg-success { text-align: center; padding: 24px; }
+.tg-success-icon { font-size: 48px; margin-bottom: 8px; }
+.tg-empty { text-align: center; padding: 36px 14px; background: var(--tg-theme-secondary-bg-color, #fff); border-radius: var(--radius-lg); }
+.empty-icon { font-size: 40px; margin-bottom: 8px; }

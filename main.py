@@ -1,17 +1,19 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, UploadFile, File, HTTPException, Header, Depends
+from aiogram import Bot, Dispatcher
+from aiogram.types import BufferedInputFile, Update
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from aiogram import Bot, Dispatcher
-from aiogram.types import Update, BufferedInputFile
 
-from config import settings
 import database as db
 import travelpayouts as tp
 from bot_handlers import router as bot_router
-from order_actions import confirm_order as confirm_order_action, reject_order as reject_order_action
+from config import settings
+from order_actions import confirm_order as confirm_order_action
+from order_actions import reject_order as reject_order_action
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("saudiya-bilet")
@@ -23,10 +25,18 @@ dp.include_router(bot_router)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    webhook_url = f"{settings.WEBHOOK_BASE_URL}/webhook"
-    await bot.set_webhook(webhook_url, drop_pending_updates=False)
-    log.info(f"Webhook o'rnatildi: {webhook_url}")
+    webhook_url = f"{settings.WEBHOOK_BASE_URL.rstrip('/')}/webhook" if settings.WEBHOOK_BASE_URL else ""
+    if webhook_url and webhook_url.startswith("http"):
+        try:
+            await bot.set_webhook(webhook_url, drop_pending_updates=False)
+            log.info(f"Webhook o'rnatildi: {webhook_url}")
+        except Exception as e:
+            log.warning(f"Webhook o'rnatishda xatolik: {e}")
     yield
+    try:
+        await bot.session.close()
+    except Exception as e:
+        log.debug(f"Bot session yopishda xatolik: {e}")
 
 
 app = FastAPI(title="Saudiya Biletlar API", lifespan=lifespan)
@@ -50,38 +60,39 @@ def verify_admin(x_admin_password: str = Header(default="")):
 # ==================== TELEGRAM WEBHOOK ====================
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
-    data = await request.json()
-    update = Update.model_validate(data)
-    await dp.feed_update(bot, update)
+    try:
+        data = await request.json()
+        update = Update.model_validate(data)
+        await dp.feed_update(bot, update)
+    except Exception:
+        log.exception("Telegram webhook xatosi")
     return {"ok": True}
-
-
-@app.get("/")
-async def root():
-    return {"status": "ok", "service": "Saudiya Biletlar backend faol ishlayapti"}
 
 
 # ==================== CHIPTA QIDIRUV ====================
 @app.get("/api/search")
 async def api_search(origin: str, destination: str, depart_date: str):
+    origin_iata = tp.to_iata(origin)
+    dest_iata = tp.to_iata(destination)
+
     # 1) Qo'lda qo'shilgan chiptalar
     try:
-        manual = db.list_manual_flights(origin, destination, depart_date)
-    except Exception as e:
+        manual = db.list_manual_flights(origin_iata, dest_iata, depart_date)
+    except Exception:
         log.exception("manual_flights xatolik")
         manual = []
 
     manual_results = [{
-        "origin": origin.upper(),
-        "destination": destination.upper(),
-        "price": f["price"],
-        "airline": f.get("airline", "Saudiya Biletlar"),
-        "flight_number": f.get("flight_number", "SAU-001"),
-        "departure_at": f"{f['depart_date']}T{f.get('departure_time') or '09:30'}:00",
+        "origin": (f.get("origin") or origin_iata).upper(),
+        "destination": (f.get("destination") or dest_iata).upper(),
+        "price": f.get("price"),
+        "airline": f.get("airline") or "Saudiya Biletlar",
+        "flight_number": f.get("flight_number") or "SAU-001",
+        "departure_at": f"{f.get('depart_date')}T{f.get('departure_time') or '09:30'}:00",
         "transfers": f.get("transfers", 0),
         "seats_available": f.get("seats_available", 10),
         "source": "manual",
-        "manual_flight_id": f["id"],
+        "manual_flight_id": f.get("id"),
     } for f in manual]
 
     # 2) Travelpayouts API
@@ -89,7 +100,7 @@ async def api_search(origin: str, destination: str, depart_date: str):
         api_results = await tp.search_flights(origin, destination, depart_date)
         for r in api_results:
             r["source"] = "api"
-    except Exception as e:
+    except Exception:
         log.exception("search error")
         api_results = []
 
@@ -104,33 +115,51 @@ async def api_create_order(payload: dict):
         if field not in payload:
             raise HTTPException(status_code=400, detail=f"'{field}' maydoni yo'q")
 
+    flight_data = payload.get("flight_data") or {}
+    price = payload.get("price")
+    if price is None and isinstance(flight_data, dict):
+        price = flight_data.get("price")
+
     order = db.create_order({
         "telegram_user_id": payload["telegram_user_id"],
         "username": payload.get("username"),
-        "origin": payload["origin"],
-        "destination": payload["destination"],
+        "origin": str(payload["origin"]).upper(),
+        "destination": str(payload["destination"]).upper(),
         "depart_date": payload["depart_date"],
         "passengers": payload.get("passengers", 1),
-        "flight_data": payload["flight_data"],
-        "price": payload["flight_data"].get("price"),
+        "flight_data": flight_data,
+        "price": price,
         "status": "new",
     })
-    passport = db.save_passport(order["id"], payload["passport"])
+
+    passport_data = payload.get("passport") or {}
+    order_id = order.get("id")
+    passport = db.save_passport(order_id, passport_data)
+
+    first_n = passport.get("first_name") or "-"
+    last_n = passport.get("last_name") or ""
+    p_num = passport.get("passport_number") or "-"
+    b_year = passport.get("birth_year") or "-"
+    exp_date = passport.get("expiry_date") or "-"
 
     text = (
-        f"🆕 <b>Yangi buyurtma #{order['id']}</b>\n\n"
-        f"👤 {passport['first_name']} {passport['last_name']}\n"
-        f"🛂 Passport: {passport['passport_number']}\n"
-        f"📅 Tug'ilgan yil: {passport['birth_year']}\n"
-        f"⏳ Amal qilish: {passport['expiry_date']}\n\n"
-        f"✈️ {order['origin']} ➔ {order['destination']}\n"
-        f"🗓 {order['depart_date']} | 👥 {order['passengers']} yo'lovchi\n"
-        f"💵 <b>${order['price']} USD</b>\n\n"
+        f"🆕 <b>Yangi buyurtma #{order_id}</b>\n\n"
+        f"👤 {first_n} {last_n}\n"
+        f"🛂 Passport: {p_num}\n"
+        f"📅 Tug'ilgan yil: {b_year}\n"
+        f"⏳ Amal qilish: {exp_date}\n\n"
+        f"✈️ {order.get('origin')} ➔ {order.get('destination')}\n"
+        f"🗓 {order.get('depart_date')} | 👥 {order.get('passengers', 1)} yo'lovchi\n"
+        f"💵 <b>${order.get('price', '-')} USD</b>\n\n"
         f"To'lov cheki kelgach tasdiqlash uchun:\n"
-        f"<code>/confirm_order {order['id']}</code>"
+        f"<code>/confirm_order {order_id}</code>"
     )
-    await bot.send_message(settings.ADMIN_CHAT_ID, text, parse_mode="HTML")
-    return {"order_id": order["id"]}
+    try:
+        await bot.send_message(settings.ADMIN_CHAT_ID, text, parse_mode="HTML")
+    except Exception as e:
+        log.warning(f"Admin guruhiga xabar yuborilmadi: {e}")
+
+    return {"order_id": order_id}
 
 
 # ==================== TO'LOV CHEKI ====================
@@ -141,20 +170,25 @@ async def api_upload_payment(order_id: int, file: UploadFile = File(...)):
         raise HTTPException(status_code=404, detail="Buyurtma topilmadi")
 
     content = await file.read()
-    url = db.upload_file("payments", f"{order_id}_{file.filename}", content, file.content_type or "image/jpeg")
+    filename = file.filename or "receipt.jpg"
+    url = db.upload_file("payments", f"{order_id}_{filename}", content, file.content_type or "image/jpeg")
     db.update_order(order_id, {"payment_screenshot_url": url, "status": "awaiting_confirmation"})
 
-    photo = BufferedInputFile(content, filename=file.filename)
-    await bot.send_photo(
-        settings.ADMIN_CHAT_ID,
-        photo,
-        caption=(
-            f"💳 <b>To'lov cheki — buyurtma #{order_id}</b>\n\n"
-            f"Tasdiqlash: <code>/confirm_order {order_id}</code>\n"
-            f"Rad etish: <code>/reject_order {order_id} &lt;sabab&gt;</code>"
-        ),
-        parse_mode="HTML"
-    )
+    try:
+        photo = BufferedInputFile(content, filename=filename)
+        await bot.send_photo(
+            settings.ADMIN_CHAT_ID,
+            photo,
+            caption=(
+                f"💳 <b>To'lov cheki — buyurtma #{order_id}</b>\n\n"
+                f"Tasdiqlash: <code>/confirm_order {order_id}</code>\n"
+                f"Rad etish: <code>/reject_order {order_id} &lt;sabab&gt;</code>"
+            ),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        log.warning(f"Admin guruhiga to'lov cheki yuborilmadi: {e}")
+
     return {"ok": True, "url": url}
 
 
@@ -162,16 +196,17 @@ async def api_upload_payment(order_id: int, file: UploadFile = File(...)):
 @app.get("/api/my-orders")
 async def api_my_orders(telegram_user_id: int):
     try:
-        res = db.supabase.table("orders").select("*, passports(*)").eq("telegram_user_id", telegram_user_id).order("id", desc=True).limit(20).execute()
-        return {"orders": res.data or []}
-    except Exception as e:
+        orders = db.get_orders_by_user(telegram_user_id, limit=20)
+        return {"orders": orders}
+    except Exception:
         log.exception("my-orders xatolik")
         return {"orders": []}
 
 
 # ==================== KANALGA CHIROYLI AVTO-POST ====================
 @app.post("/api/cron/daily-post")
-async def api_daily_post(secret: str):
+@app.get("/api/cron/daily-post")
+async def api_daily_post(secret: str = ""):
     if secret != settings.CRON_SECRET:
         raise HTTPException(status_code=403, detail="Ruxsat yo'q")
 
@@ -179,7 +214,11 @@ async def api_daily_post(secret: str):
     if not tickets:
         return {"posted": 0}
 
-    cheapest = sorted(tickets, key=lambda x: x.get("value") or 999999)[:4]
+    valid_tickets = [t for t in tickets if t.get("value") is not None]
+    if not valid_tickets:
+        return {"posted": 0}
+
+    cheapest = sorted(valid_tickets, key=lambda x: float(x.get("value") or 999999))[:4]
     
     UZS_RATE = 12850  # Taxminiy so'm kursi
 
@@ -189,7 +228,7 @@ async def api_daily_post(secret: str):
     )
     
     for t in cheapest:
-        val = int(t.get("value", 380))
+        val = int(t.get("value") or 380)
         val_uzs = f"{val * UZS_RATE:,}".replace(",", " ")
         text += (
             f"🔹 <b>{t['origin']} ➔ {t['destination']}</b>\n"
@@ -202,11 +241,15 @@ async def api_daily_post(secret: str):
     text += (
         "\n⚡️ <i>Joylar soni cheklangan! Chipta band qilish uchun botga kiring:</i>\n"
         "👉 @Saudiya_Biletlarbot\n"
-        "👤 Savollar uchun: @nuriddinovdfg"
+        f"👤 Savollar uchun: @{settings.ADMIN_USERNAME}"
     )
 
-    await bot.send_message(settings.CHANNEL_ID, text, parse_mode="HTML")
-    return {"posted": len(cheapest)}
+    try:
+        await bot.send_message(settings.CHANNEL_ID, text, parse_mode="HTML")
+        return {"posted": len(cheapest)}
+    except Exception as e:
+        log.exception("Kanalga post yuborishda xatolik")
+        raise HTTPException(status_code=500, detail=f"Kanalga xabar yuborishda xatolik: {e}")
 
 
 # ==================== ADMIN PANEL ====================
@@ -242,19 +285,34 @@ async def admin_list_flights():
 async def admin_create_flight(payload: dict):
     required = ["origin", "destination", "depart_date", "price"]
     for field in required:
-        if field not in payload or not payload[field]:
+        if field not in payload or payload[field] is None or str(payload[field]).strip() == "":
             raise HTTPException(status_code=400, detail=f"'{field}' maydoni to'ldirilmagan")
 
+    origin_code = tp.to_iata(str(payload["origin"])).lower()
+    dest_code = tp.to_iata(str(payload["destination"])).lower()
+
+    try:
+        price = float(payload["price"])
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Narx son bo'lishi kerak")
+
+    seats = payload.get("seats_available")
+    if seats is not None:
+        try:
+            seats = int(seats)
+        except (ValueError, TypeError):
+            seats = None
+
     flight = db.create_manual_flight({
-        "origin": payload["origin"].strip().lower(),
-        "destination": payload["destination"].strip().lower(),
-        "depart_date": payload["depart_date"],
-        "departure_time": payload.get("departure_time"),
-        "price": payload["price"],
-        "airline": payload.get("airline", "Saudiya Biletlar"),
-        "flight_number": payload.get("flight_number"),
-        "transfers": payload.get("transfers", 0),
-        "seats_available": payload.get("seats_available"),
+        "origin": origin_code,
+        "destination": dest_code,
+        "depart_date": str(payload["depart_date"]).strip(),
+        "departure_time": payload.get("departure_time") or None,
+        "price": price,
+        "airline": payload.get("airline") or "Saudiya Biletlar",
+        "flight_number": payload.get("flight_number") or None,
+        "transfers": int(payload.get("transfers", 0) or 0),
+        "seats_available": seats,
         "is_active": True,
     })
     return {"flight": flight}
@@ -271,3 +329,13 @@ async def admin_login(payload: dict):
     if payload.get("password") != settings.ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Noto'g'ri parol")
     return {"ok": True}
+
+
+@app.get("/api/health")
+async def api_health():
+    return {"status": "ok", "service": "Saudiya Biletlar backend faol ishlayapti"}
+
+
+# ==================== MINI APP FRONTEND STATIC MOUNT ====================
+if os.path.exists("static"):
+    app.mount("/", StaticFiles(directory="static", html=True), name="static")

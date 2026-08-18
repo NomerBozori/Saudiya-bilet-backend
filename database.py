@@ -1,4 +1,5 @@
-from supabase import create_client, Client
+from supabase import Client, create_client
+
 from config import settings
 
 supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
@@ -6,7 +7,7 @@ supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 
 def create_order(data: dict) -> dict:
     res = supabase.table("orders").insert(data).execute()
-    return res.data[0]
+    return res.data[0] if res.data else {}
 
 
 def get_order(order_id: int) -> dict | None:
@@ -22,12 +23,25 @@ def update_order(order_id: int, data: dict) -> dict:
 def save_passport(order_id: int, passport: dict) -> dict:
     payload = {**passport, "order_id": order_id}
     res = supabase.table("passports").insert(payload).execute()
-    return res.data[0]
+    return res.data[0] if res.data else payload
 
 
 def get_passport_by_order(order_id: int) -> dict | None:
     res = supabase.table("passports").select("*").eq("order_id", order_id).maybe_single().execute()
     return res.data if res else None
+
+
+def get_orders_by_user(telegram_user_id: int, limit: int = 20) -> list[dict]:
+    """Mijozning buyurtmalar tarixini pasportlari bilan birga qaytaradi."""
+    res = (
+        supabase.table("orders")
+        .select("*, passports(*)")
+        .eq("telegram_user_id", telegram_user_id)
+        .order("id", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return res.data or []
 
 
 def upload_file(bucket: str, path: str, file_bytes: bytes, content_type: str = "image/jpeg") -> str:
@@ -43,27 +57,27 @@ def upload_file(bucket: str, path: str, file_bytes: bytes, content_type: str = "
 # ==================== ADMIN: BUYURTMALAR RO'YXATI ====================
 def get_orders_with_passport(status: str | None = None, limit: int = 100) -> list[dict]:
     """Buyurtmalarni pasport ma'lumotlari bilan birga qaytaradi (admin panel uchun)."""
-    query = supabase.table("orders").select("*, passports(*)").order("id", desc=True).limit(limit)
+    query = supabase.table("orders").select("*, passports(*)")
     if status:
         query = query.eq("status", status)
-    res = query.execute()
+    res = query.order("id", desc=True).limit(limit).execute()
     return res.data or []
 
 
 # ==================== ADMIN: QO'LDA CHIPTA QO'SHISH ====================
 def create_manual_flight(data: dict) -> dict:
     res = supabase.table("manual_flights").insert(data).execute()
-    return res.data[0]
+    return res.data[0] if res.data else {}
 
 
 def list_manual_flights(origin: str | None = None, destination: str | None = None, depart_date: str | None = None) -> list[dict]:
     query = supabase.table("manual_flights").select("*").eq("is_active", True)
     if origin:
-        query = query.eq("origin", origin.lower())
+        query = query.ilike("origin", origin.strip())
     if destination:
-        query = query.eq("destination", destination.lower())
+        query = query.ilike("destination", destination.strip())
     if depart_date:
-        query = query.eq("depart_date", depart_date)
+        query = query.eq("depart_date", depart_date.strip())
     res = query.order("price").execute()
     return res.data or []
 

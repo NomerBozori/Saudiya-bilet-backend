@@ -6,6 +6,7 @@ function setupFlightAutocomplete(inputId, hiddenId, boxId) {
   const input = document.getElementById(inputId);
   const hidden = document.getElementById(hiddenId);
   const box = document.getElementById(boxId);
+  if (!input || !hidden || !box) return;
   let debounceTimer = null;
 
   input.addEventListener("input", () => {
@@ -88,39 +89,51 @@ async function apiFetch(path, options = {}) {
 }
 
 function showLogin() {
-  document.getElementById("login-screen").classList.remove("hidden");
-  document.getElementById("panel").classList.add("hidden");
+  const loginScreen = document.getElementById("login-screen");
+  const panel = document.getElementById("panel");
+  if (loginScreen) loginScreen.classList.remove("hidden");
+  if (panel) panel.classList.add("hidden");
 }
 
 function showPanel() {
-  document.getElementById("login-screen").classList.add("hidden");
-  document.getElementById("panel").classList.remove("hidden");
+  const loginScreen = document.getElementById("login-screen");
+  const panel = document.getElementById("panel");
+  if (loginScreen) loginScreen.classList.add("hidden");
+  if (panel) panel.classList.remove("hidden");
   loadOrders();
   loadFlights();
 }
 
-document.getElementById("login-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const pw = document.getElementById("login-password").value;
-  try {
-    const res = await fetch(`${API_BASE}/api/admin/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: pw }),
-    });
-    if (!res.ok) throw new Error("Noto'g'ri parol");
-    setPassword(pw);
-    document.getElementById("login-error").classList.add("hidden");
-    showPanel();
-  } catch (err) {
-    document.getElementById("login-error").classList.remove("hidden");
-  }
-});
+const loginForm = document.getElementById("login-form");
+if (loginForm) {
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const pw = document.getElementById("login-password").value;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw }),
+      });
+      if (!res.ok) throw new Error("Noto'g'ri parol");
+      setPassword(pw);
+      const errEl = document.getElementById("login-error");
+      if (errEl) errEl.classList.add("hidden");
+      showPanel();
+    } catch (err) {
+      const errEl = document.getElementById("login-error");
+      if (errEl) errEl.classList.remove("hidden");
+    }
+  });
+}
 
-document.getElementById("logout-btn").addEventListener("click", () => {
-  clearPassword();
-  showLogin();
-});
+const logoutBtn = document.getElementById("logout-btn");
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", () => {
+    clearPassword();
+    showLogin();
+  });
+}
 
 // Sahifa yuklanganda tekshirish
 (async function initAuth() {
@@ -139,7 +152,14 @@ document.querySelectorAll(".a-tab").forEach(tab => {
     document.querySelectorAll(".a-tab").forEach(t => t.classList.remove("active"));
     document.querySelectorAll(".a-tab-content").forEach(c => c.classList.add("hidden"));
     tab.classList.add("active");
-    document.getElementById(`tab-${tab.dataset.tab}`).classList.remove("hidden");
+    const target = document.getElementById(`tab-${tab.dataset.tab}`);
+    if (target) target.classList.remove("hidden");
+
+    if (tab.dataset.tab === "orders") {
+      loadOrders();
+    } else if (tab.dataset.tab === "all-flights") {
+      loadFlights();
+    }
   });
 });
 
@@ -152,7 +172,8 @@ const STATUS_LABELS = {
 };
 
 async function loadOrders() {
-  const status = document.getElementById("status-filter").value;
+  const statusFilter = document.getElementById("status-filter");
+  const status = statusFilter ? statusFilter.value : "";
   const qs = status ? `?status=${status}` : "";
   try {
     const data = await apiFetch(`/api/admin/orders${qs}`);
@@ -172,23 +193,30 @@ function updateDashboardStats(orders) {
     .filter(o => o.status === "confirmed")
     .reduce((sum, o) => sum + (parseFloat(o.price) || 0), 0);
 
-  document.getElementById("stat-total-orders").innerText = total;
-  document.getElementById("stat-pending-orders").innerText = pending;
-  document.getElementById("stat-confirmed-orders").innerText = confirmed;
-  document.getElementById("stat-revenue").innerText = `$${revenue.toLocaleString()}`;
+  const statTotal = document.getElementById("stat-total-orders");
+  const statPending = document.getElementById("stat-pending-orders");
+  const statConfirmed = document.getElementById("stat-confirmed-orders");
+  const statRevenue = document.getElementById("stat-revenue");
+
+  if (statTotal) statTotal.innerText = total;
+  if (statPending) statPending.innerText = pending;
+  if (statConfirmed) statConfirmed.innerText = confirmed;
+  if (statRevenue) statRevenue.innerText = `$${revenue.toLocaleString()}`;
 }
 
 function filterOrdersLocally() {
-  const query = document.getElementById("orders-search").value.toLowerCase().trim();
+  const searchInput = document.getElementById("orders-search");
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
   if (!query) {
     renderOrders(cachedOrders);
     return;
   }
   const filtered = cachedOrders.filter(order => {
-    const passport = (order.passports && order.passports[0]) || order.passports || {};
+    const p_raw = order.passports;
+    const passport = (Array.isArray(p_raw) && p_raw[0]) ? p_raw[0] : (p_raw && typeof p_raw === "object" ? p_raw : {});
     const fullName = `${passport.first_name || ""} ${passport.last_name || ""}`.toLowerCase();
     const pNum = (passport.passport_number || "").toLowerCase();
-    const orderId = String(order.id);
+    const orderId = String(order.id || "");
     return fullName.includes(query) || pNum.includes(query) || orderId.includes(query);
   });
   renderOrders(filtered);
@@ -197,24 +225,28 @@ function filterOrdersLocally() {
 function renderOrders(orders) {
   const list = document.getElementById("orders-list");
   const empty = document.getElementById("orders-empty");
+  if (!list) return;
   list.innerHTML = "";
 
-  if (!orders.length) {
-    empty.classList.remove("hidden");
+  if (!orders || !orders.length) {
+    if (empty) empty.classList.remove("hidden");
     return;
   }
-  empty.classList.add("hidden");
+  if (empty) empty.classList.add("hidden");
 
   orders.forEach(order => {
-    const passport = (order.passports && order.passports[0]) || order.passports || {};
+    const p_raw = order.passports;
+    const passport = (Array.isArray(p_raw) && p_raw[0]) ? p_raw[0] : (p_raw && typeof p_raw === "object" ? p_raw : {});
     const statusClass = order.status === "confirmed" ? "confirmed" : order.status === "rejected" ? "rejected" : "";
+    const origin = (order.origin || "-").toUpperCase();
+    const destination = (order.destination || "-").toUpperCase();
     const card = document.createElement("div");
     card.className = `order-card ${statusClass}`;
     
     card.innerHTML = `
       <div class="order-top">
-        <div class="order-id">#${order.id} — ✈️ ${order.origin.toUpperCase()} ➔ ${order.destination.toUpperCase()}</div>
-        <div class="order-status-badge ${statusClass}">${STATUS_LABELS[order.status] || order.status}</div>
+        <div class="order-id">#${order.id} — ✈️ ${origin} ➔ ${destination}</div>
+        <div class="order-status-badge ${statusClass}">${STATUS_LABELS[order.status] || order.status || "Noma'lum"}</div>
       </div>
       
       <div class="order-details-grid">
@@ -228,16 +260,16 @@ function renderOrders(orders) {
         </div>
         <div class="order-detail-item">
           <span>UCHISH SANASI</span>
-          <strong>${order.depart_date} (${order.passengers || 1} yo'lovchi)</strong>
+          <strong>${order.depart_date || "-"} (${order.passengers || 1} yo'lovchi)</strong>
         </div>
         <div class="order-detail-item">
           <span>SUMMA (TO'LOV)</span>
-          <strong style="color: var(--primary); font-size: 15px;">$${order.price}</strong>
+          <strong style="color: var(--primary); font-size: 15px;">$${order.price ?? "-"}</strong>
         </div>
       </div>
 
       <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
-        👤 Telegram: <code>${order.telegram_user_id}</code> ${order.username ? "(@" + order.username + ")" : ""}
+        👤 Telegram: <code>${order.telegram_user_id || "-"}</code> ${order.username ? "(@" + order.username + ")" : ""}
       </div>
 
       ${order.payment_screenshot_url ? `
@@ -290,8 +322,11 @@ async function rejectOrder(id) {
   }
 }
 
-document.getElementById("refresh-orders").addEventListener("click", loadOrders);
-document.getElementById("status-filter").addEventListener("change", loadOrders);
+const refreshOrdersBtn = document.getElementById("refresh-orders");
+if (refreshOrdersBtn) refreshOrdersBtn.addEventListener("click", loadOrders);
+
+const statusFilterEl = document.getElementById("status-filter");
+if (statusFilterEl) statusFilterEl.addEventListener("change", loadOrders);
 
 // ==================== QO'LDA CHIPTA QO'SHISH VA RO'YXAT ====================
 async function loadFlights() {
@@ -305,23 +340,26 @@ async function loadFlights() {
 
 function renderFlights(flights) {
   const list = document.getElementById("flights-list");
+  if (!list) return;
   list.innerHTML = "";
-  if (!flights.length) {
+  if (!flights || !flights.length) {
     list.innerHTML = `<div class="a-empty"><div class="empty-icon">✈️</div>Hali chiptalar qo'shilmagan.</div>`;
     return;
   }
   flights.forEach(f => {
+    const origin = (f.origin || "-").toUpperCase();
+    const destination = (f.destination || "-").toUpperCase();
     const card = document.createElement("div");
     card.className = "flight-item-card";
     card.innerHTML = `
       <div>
-        <div class="flight-route-title">✈️ ${f.origin.toUpperCase()} ➔ ${f.destination.toUpperCase()}</div>
+        <div class="flight-route-title">✈️ ${origin} ➔ ${destination}</div>
         <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
-          📅 ${f.depart_date} ${f.departure_time || ""} | 🛫 ${f.airline || ""} (${f.flight_number || "-"}) | 💺 O'rindiqlar: <strong>${f.seats_available ?? "Ko'p"}</strong>
+          📅 ${f.depart_date || ""} ${f.departure_time || ""} | 🛫 ${f.airline || ""} (${f.flight_number || "-"}) | 💺 O'rindiqlar: <strong>${f.seats_available ?? "Ko'p"}</strong>
         </div>
       </div>
       <div style="display: flex; align-items: center; gap: 14px;">
-        <div style="font-size: 20px; font-weight: 800; color: var(--primary);">$${f.price}</div>
+        <div style="font-size: 20px; font-weight: 800; color: var(--primary);">$${f.price ?? 0}</div>
         <button class="flight-del-btn" data-id="${f.id}">🗑 O'chirish</button>
       </div>
     `;
@@ -331,61 +369,77 @@ function renderFlights(flights) {
   list.querySelectorAll(".flight-del-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
       if (!confirm("Ushbu chiptani o'chirmoqchimisiz?")) return;
-      await apiFetch(`/api/admin/flights/${btn.dataset.id}`, { method: "DELETE" });
-      loadFlights();
+      try {
+        await apiFetch(`/api/admin/flights/${btn.dataset.id}`, { method: "DELETE" });
+        loadFlights();
+      } catch (e) {
+        alert("O'chirishda xatolik: " + e.message);
+      }
     });
   });
 }
 
-document.getElementById("btn-add-flight").addEventListener("click", async () => {
-  const originCode = document.getElementById("f_origin_code").value || document.getElementById("f_origin").value;
-  const destinationCode = document.getElementById("f_destination_code").value || document.getElementById("f_destination").value;
+const addFlightBtn = document.getElementById("btn-add-flight");
+if (addFlightBtn) {
+  addFlightBtn.addEventListener("click", async () => {
+    const originCode = document.getElementById("f_origin_code").value || document.getElementById("f_origin").value;
+    const destinationCode = document.getElementById("f_destination_code").value || document.getElementById("f_destination").value;
 
-  if (!originCode || !destinationCode) {
-    alert("Iltimos, jo'nash va borish shahar/aeroportini kiriting.");
-    return;
-  }
+    if (!originCode || !destinationCode) {
+      alert("Iltimos, jo'nash va borish shahar/aeroportini kiriting.");
+      return;
+    }
 
-  const payload = {
-    origin: originCode.trim(),
-    destination: destinationCode.trim(),
-    depart_date: document.getElementById("f_depart_date").value,
-    departure_time: document.getElementById("f_departure_time").value || null,
-    price: parseFloat(document.getElementById("f_price").value),
-    seats_available: document.getElementById("f_seats").value ? parseInt(document.getElementById("f_seats").value) : null,
-    airline: document.getElementById("f_airline").value || "Umra Chipta",
-    flight_number: document.getElementById("f_flight_number").value || null,
-  };
+    const departDate = document.getElementById("f_depart_date").value;
+    const priceVal = parseFloat(document.getElementById("f_price").value);
 
-  if (!payload.depart_date || !payload.price) {
-    alert("Iltimos, sana va narxni to'ldiring.");
-    return;
-  }
+    if (!departDate || isNaN(priceVal) || priceVal < 0) {
+      alert("Iltimos, to'g'ri sana va narxni kiriting.");
+      return;
+    }
 
-  try {
-    await apiFetch("/api/admin/flights", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    alert("✅ Chipta muvaffaqiyatli qo'shildi!");
-    document.getElementById("f_origin").value = "";
-    document.getElementById("f_destination").value = "";
-    document.getElementById("f_origin_code").value = "";
-    document.getElementById("f_destination_code").value = "";
-    document.getElementById("f_price").value = "";
-    document.getElementById("f_seats").value = "";
-    document.getElementById("f_flight_number").value = "";
-    loadFlights();
-  } catch (e) {
-    alert("Xatolik: " + e.message);
-  }
-});
+    const payload = {
+      origin: originCode.trim(),
+      destination: destinationCode.trim(),
+      depart_date: departDate,
+      departure_time: document.getElementById("f_departure_time").value || null,
+      price: priceVal,
+      seats_available: document.getElementById("f_seats").value ? parseInt(document.getElementById("f_seats").value) : null,
+      airline: document.getElementById("f_airline").value || "Saudiya Biletlar",
+      flight_number: document.getElementById("f_flight_number").value || null,
+    };
+
+    try {
+      await apiFetch("/api/admin/flights", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      alert("✅ Chipta muvaffaqiyatli qo'shildi!");
+      document.getElementById("f_origin").value = "";
+      document.getElementById("f_destination").value = "";
+      document.getElementById("f_origin_code").value = "";
+      document.getElementById("f_destination_code").value = "";
+      document.getElementById("f_depart_date").value = "";
+      document.getElementById("f_departure_time").value = "";
+      document.getElementById("f_price").value = "";
+      document.getElementById("f_seats").value = "";
+      document.getElementById("f_airline").value = "";
+      document.getElementById("f_flight_number").value = "";
+      loadFlights();
+    } catch (e) {
+      alert("Xatolik: " + e.message);
+    }
+  });
+}
 
 // ==================== IMAGE MODAL ====================
 function openImgModal(src) {
-  document.getElementById("modalPreviewImg").src = src;
-  document.getElementById("imgModal").classList.remove("hidden");
+  const modalImg = document.getElementById("modalPreviewImg");
+  const modal = document.getElementById("imgModal");
+  if (modalImg) modalImg.src = src;
+  if (modal) modal.classList.remove("hidden");
 }
 function closeImgModal() {
-  document.getElementById("imgModal").classList.add("hidden");
+  const modal = document.getElementById("imgModal");
+  if (modal) modal.classList.add("hidden");
 }

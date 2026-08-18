@@ -1,25 +1,27 @@
-from aiogram import Router, Bot, F
+import logging
+
+from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import (
-    Message,
     CallbackQuery,
-    InlineKeyboardMarkup,
     InlineKeyboardButton,
-    WebAppInfo
+    InlineKeyboardMarkup,
+    Message,
+    WebAppInfo,
 )
 
-from config import settings
 import database as db
+from config import settings
 from order_actions import confirm_order, reject_order
 
+log = logging.getLogger("bot_handlers")
 router = Router()
 
-ADMIN_TG = "nuriddinovdfg"
 
 # ==================== ASOSIY MENYU ====================
 
-def get_main_keyboard():
-    web_app_url = settings.WEBHOOK_BASE_URL
+def get_main_keyboard() -> InlineKeyboardMarkup:
+    web_app_url = settings.WEBHOOK_BASE_URL.rstrip('/') if settings.WEBHOOK_BASE_URL else ""
     buttons = []
     
     # 1. Asosiy Mini App (Aviachipta qidirish)
@@ -39,7 +41,7 @@ def get_main_keyboard():
 
     # 3. Aloqa
     buttons.append([
-        InlineKeyboardButton(text="📞 Bog'lanish (@nuriddinovdfg)", callback_data="bot_menu_contact")
+        InlineKeyboardButton(text=f"📞 Bog'lanish (@{settings.ADMIN_USERNAME})", callback_data="bot_menu_contact")
     ])
     
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -49,7 +51,7 @@ def get_main_keyboard():
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
-    user_name = message.from_user.first_name or "Hurmatli mijoz"
+    user_name = message.from_user.first_name if message.from_user and message.from_user.first_name else "Hurmatli mijoz"
     
     welcome_text = (
         f"✈️ <b>Saudiya Biletlar Botiga xush kelibsiz, {user_name}!</b>\n\n"
@@ -70,12 +72,12 @@ async def cmd_start(message: Message):
 @router.message(Command("myorders"))
 @router.callback_query(F.data == "bot_my_orders")
 async def cb_my_orders(event: Message | CallbackQuery):
-    user_id = event.from_user.id
+    user_id = event.from_user.id if event.from_user else 0
     
     try:
-        res = db.supabase.table("orders").select("*, passports(*)").eq("telegram_user_id", user_id).order("id", desc=True).limit(5).execute()
-        orders = res.data or []
+        orders = db.get_orders_by_user(user_id, limit=5)
     except Exception as e:
+        log.warning(f"Buyurtmalarni olishda xatolik: {e}")
         orders = []
 
     if not orders:
@@ -92,24 +94,41 @@ async def cb_my_orders(event: Message | CallbackQuery):
             "rejected": "❌ Rad etilgan"
         }
         for o in orders:
-            passport = (o.get("passports") and o["passports"][0]) or {}
-            st = STATUS_MAP.get(o.get("status"), o.get("status"))
+            p_raw = o.get("passports")
+            if isinstance(p_raw, list) and len(p_raw) > 0:
+                passport = p_raw[0] if isinstance(p_raw[0], dict) else {}
+            elif isinstance(p_raw, dict):
+                passport = p_raw
+            else:
+                passport = {}
+
+            st = STATUS_MAP.get(o.get("status"), o.get("status") or "Noma'lum")
+            first_n = passport.get("first_name") or ""
+            last_n = passport.get("last_name") or ""
+            passenger_name = f"{first_n} {last_n}".strip() or "-"
+            origin = (o.get("origin") or "-").upper()
+            destination = (o.get("destination") or "-").upper()
+            order_id = o.get("id", "-")
+            depart_date = o.get("depart_date", "-")
+            price = o.get("price", "-")
+
             text += (
-                f"🎫 <b>Buyurtma #{o['id']}</b>\n"
-                f"   ✈️ {o.get('origin', '').upper()} ➔ {o.get('destination', '').upper()}\n"
-                f"   👤 Yo'lovchi: {passport.get('first_name', '')} {passport.get('last_name', '')}\n"
-                f"   📅 Sana: {o.get('depart_date')} | 💵 ${o.get('price')}\n"
+                f"🎫 <b>Buyurtma #{order_id}</b>\n"
+                f"   ✈️ {origin} ➔ {destination}\n"
+                f"   👤 Yo'lovchi: {passenger_name}\n"
+                f"   📅 Sana: {depart_date} | 💵 ${price}\n"
                 f"   📊 Holati: <b>{st}</b>\n"
                 f"   ──────────────\n"
             )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✈️ Yangi Bilet Qidirish", callback_data="bot_main_menu")],
-        [InlineKeyboardButton(text="💬 Adminga Yozish", url=f"https://t.me/{ADMIN_TG}")]
+        [InlineKeyboardButton(text="💬 Adminga Yozish", url=f"https://t.me/{settings.ADMIN_USERNAME}")]
     ])
 
     if isinstance(event, CallbackQuery):
-        await event.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        if event.message:
+            await event.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
         await event.answer()
     else:
         await event.answer(text, reply_markup=kb, parse_mode="HTML")
@@ -123,7 +142,8 @@ async def cb_main_menu(call: CallbackQuery):
         "✈️ <b>Saudiya Biletlar Bosh Menyusi</b>\n\n"
         "Kerakli bo'limni tanlang:"
     )
-    await call.message.edit_text(text, reply_markup=get_main_keyboard(), parse_mode="HTML")
+    if call.message:
+        await call.message.edit_text(text, reply_markup=get_main_keyboard(), parse_mode="HTML")
     await call.answer()
 
 
@@ -142,10 +162,11 @@ async def cb_visa_services(call: CallbackQuery):
         "<i>Viza narxi va rasmiylashtirish uchun operatorimizga murojaat qiling:</i>"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✍️ Viza Rasmiylashtirish (@nuriddinovdfg)", url=f"https://t.me/{ADMIN_TG}")],
+        [InlineKeyboardButton(text=f"✍️ Viza Rasmiylashtirish (@{settings.ADMIN_USERNAME})", url=f"https://t.me/{settings.ADMIN_USERNAME}")],
         [InlineKeyboardButton(text="🔙 Asosiy Menyu", callback_data="bot_main_menu")]
     ])
-    await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    if call.message:
+        await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     await call.answer()
 
 
@@ -153,20 +174,26 @@ async def cb_visa_services(call: CallbackQuery):
 async def cb_contact(call: CallbackQuery):
     text = (
         "📞 <b>BIZ BILAN BOG'LANISH</b>\n\n"
-        f"👤 <b>Bosh Operator / Admin:</b> @{ADMIN_TG}\n"
+        f"👤 <b>Bosh Operator / Admin:</b> @{settings.ADMIN_USERNAME}\n"
         "🤖 <b>Rasmiy Bot:</b> @Saudiya_Biletlarbot\n"
         "⏰ <b>Ish tartibi:</b> 24/7 uzluksiz xizmatingizdamiz\n\n"
         "Savollaringiz bo'lsa, to'g'ridan-to'g'ri adminga yozishingiz mumkin:"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💬 Adminga Yozish (@nuriddinovdfg)", url=f"https://t.me/{ADMIN_TG}")],
+        [InlineKeyboardButton(text=f"💬 Adminga Yozish (@{settings.ADMIN_USERNAME})", url=f"https://t.me/{settings.ADMIN_USERNAME}")],
         [InlineKeyboardButton(text="🔙 Asosiy Menyu", callback_data="bot_main_menu")]
     ])
-    await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    if call.message:
+        await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     await call.answer()
 
 
 # ==================== ADMIN BUYRUQLARI ====================
+
+def is_admin(message: Message) -> bool:
+    user_id = message.from_user.id if message.from_user else 0
+    return message.chat.id == settings.ADMIN_CHAT_ID or user_id == settings.ADMIN_CHAT_ID
+
 
 @router.message(Command("myid"))
 async def cmd_myid(message: Message):
@@ -175,7 +202,7 @@ async def cmd_myid(message: Message):
 
 @router.message(Command("confirm_order"))
 async def cmd_confirm_order(message: Message, command: CommandObject, bot: Bot):
-    if message.chat.id != settings.ADMIN_CHAT_ID:
+    if not is_admin(message):
         return
     if not command.args:
         await message.answer("Foydalanish: /confirm_order <buyurtma_id>")
@@ -195,7 +222,7 @@ async def cmd_confirm_order(message: Message, command: CommandObject, bot: Bot):
 
 @router.message(Command("reject_order"))
 async def cmd_reject_order(message: Message, command: CommandObject, bot: Bot):
-    if message.chat.id != settings.ADMIN_CHAT_ID:
+    if not is_admin(message):
         return
     if not command.args:
         await message.answer("Foydalanish: /reject_order <buyurtma_id> <sabab>")
