@@ -50,7 +50,7 @@ async def cmd_start(message: Message):
         f"✈️ <b>Saudiya Biletlar Botiga xush kelibsiz, {user_name}!</b>\n\n"
         f"🕋 Umra va Ziyorat reyslari uchun eng hamyonbop aviachiptalar.\n"
         f"⚡️ Ticket band qilish va tezkor viza xizmati.\n\n"
-        f"Pastdagi <b>«✈️ Aviabiletlarni Qidirish»</b> tugmasi orqali barcha reyslar va narxlarni real vaqtda ko'rishingiz mumkin!"
+        f"Pastdagi <b>«✈️ Aviabiletlarni Qidirish»</b> tugmasi orqali barcha reyslar va narxlarni ko'rishingiz mumkin!"
     )
     
     await message.answer(
@@ -76,15 +76,15 @@ async def cb_main_menu(call: CallbackQuery):
 async def cb_visa_services(call: CallbackQuery):
     text = (
         "📑 <b>SAUDIYA ARABISTONI VIZA XIZMATLARI</b>\n\n"
-        "1️⃣ <b>1 Yillik Multi Turistik Viza — $130</b>\n"
+        "1️⃣ <b>1 Yillik Multi Turistik Viza</b>\n"
         "• 1 yil davomida ko'p martalik kirish-chiqish\n"
         "• Har safar 90 kungacha qolish imkoniyati\n"
         "• Tayyor bo'lish vaqti: <b>24–48 soat</b>\n"
         "• Kerakli hujjat: Zagran pasport nusxasi va 3.5x4.5 rasm\n\n"
-        "2️⃣ <b>Rasmiy Umra Vizasi (Nusuk) — $160</b>\n"
+        "2️⃣ <b>Rasmiy Umra Vizasi (Nusuk)</b>\n"
         "• 90 kunlik rasmiy ziyorat vizasi va to'liq sug'urta\n"
         "• Tayyor bo'lish vaqti: <b>1–3 ish kuni</b>\n\n"
-        "<i>Viza rasmiylashtirish uchun operatorimizga murojaat qiling:</i>"
+        "<i>Viza narxi va rasmiylashtirish uchun operatorimizga murojaat qiling:</i>"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✍️ Viza Rasmiylashtirish (@nuriddinovdfg)", url=f"https://t.me/{ADMIN_TG}")],
@@ -98,9 +98,8 @@ async def cb_visa_services(call: CallbackQuery):
 async def cb_contact(call: CallbackQuery):
     text = (
         "📞 <b>BIZ BILAN BOG'LANISH</b>\n\n"
-        f"👤 <b>Admin / Operator:</b> @{ADMIN_TG}\n"
+        f"👤 <b>Bosh Operator / Admin:</b> @{ADMIN_TG}\n"
         "🤖 <b>Rasmiy Bot:</b> @Saudiya_Biletlarbot\n"
-        "📱 <b>Telefon:</b> +998 90 123 45 67\n"
         "⏰ <b>Ish tartibi:</b> 24/7 uzluksiz xizmatingizdamiz\n\n"
         "Savollaringiz bo'lsa, to'g'ridan-to'g'ri adminga yozishingiz mumkin:"
     )
