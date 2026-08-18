@@ -14,7 +14,7 @@ from bot_handlers import router as bot_router
 from order_actions import confirm_order as confirm_order_action, reject_order as reject_order_action
 
 logging.basicConfig(level=logging.INFO)
-log = logging.getLogger("umra-chipta")
+log = logging.getLogger("saudiya-bilet")
 
 bot = Bot(token=settings.BOT_TOKEN)
 dp = Dispatcher()
@@ -23,31 +23,25 @@ dp.include_router(bot_router)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ilova ishga tushganda Telegram webhook'ni o'rnatamiz
     webhook_url = f"{settings.WEBHOOK_BASE_URL}/webhook"
     await bot.set_webhook(webhook_url, drop_pending_updates=False)
     log.info(f"Webhook o'rnatildi: {webhook_url}")
     yield
-    # Eslatma: shutdown paytida webhookni ATAYLAB o'chirmaymiz —
-    # Render'ning bepul tarifi tez-tez qayta ishga tushadi va bu webhookni
-    # bo'shatib qo'yishi mumkin edi.
 
 
-app = FastAPI(title="Umra Chipta API", lifespan=lifespan)
+app = FastAPI(title="Saudiya Biletlar API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # Xohlasangiz faqat Vercel domeningizni yozing
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Admin panel — https://SIZNING-BACKEND.onrender.com/admin manzilida ochiladi
 app.mount("/admin", StaticFiles(directory="admin_static", html=True), name="admin")
 
 
 def verify_admin(x_admin_password: str = Header(default="")):
-    """Admin API endpointlarini himoya qiladi. So'rov header'ida X-Admin-Password kerak."""
     if x_admin_password != settings.ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Noto'g'ri admin parol")
     return True
@@ -64,33 +58,33 @@ async def telegram_webhook(request: Request):
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "service": "Umra Chipta backend ishlayapti"}
+    return {"status": "ok", "service": "Saudiya Biletlar backend faol ishlayapti"}
 
 
 # ==================== CHIPTA QIDIRUV ====================
 @app.get("/api/search")
 async def api_search(origin: str, destination: str, depart_date: str):
-    # 1) O'zimiz (admin panel orqali) qo'lda qo'shgan chiptalar — har doim birinchi ko'rsatiladi
+    # 1) Qo'lda qo'shilgan chiptalar
     try:
         manual = db.list_manual_flights(origin, destination, depart_date)
     except Exception as e:
-        log.exception("manual_flights so'rovida xato (jadval hali yaratilmagan bo'lishi mumkin)")
+        log.exception("manual_flights xatolik")
         manual = []
 
     manual_results = [{
         "origin": origin.upper(),
         "destination": destination.upper(),
         "price": f["price"],
-        "airline": f.get("airline"),
-        "flight_number": f.get("flight_number"),
-        "departure_at": f"{f['depart_date']}T{f.get('departure_time') or '00:00'}:00",
+        "airline": f.get("airline", "Saudiya Biletlar"),
+        "flight_number": f.get("flight_number", "SAU-001"),
+        "departure_at": f"{f['depart_date']}T{f.get('departure_time') or '09:30'}:00",
         "transfers": f.get("transfers", 0),
-        "seats_available": f.get("seats_available"),
+        "seats_available": f.get("seats_available", 10),
         "source": "manual",
         "manual_flight_id": f["id"],
     } for f in manual]
 
-    # 2) Travelpayouts API'dan real vaqtdagi narxlar
+    # 2) Travelpayouts API
     try:
         api_results = await tp.search_flights(origin, destination, depart_date)
         for r in api_results:
@@ -128,10 +122,10 @@ async def api_create_order(payload: dict):
         f"👤 {passport['first_name']} {passport['last_name']}\n"
         f"🛂 Passport: {passport['passport_number']}\n"
         f"📅 Tug'ilgan yil: {passport['birth_year']}\n"
-        f"⏳ Amal qilish muddati: {passport['expiry_date']}\n\n"
-        f"✈️ {order['origin']} → {order['destination']}\n"
-        f"🗓 {order['depart_date']}, {order['passengers']} yo'lovchi\n"
-        f"💵 {order['price']} USD\n\n"
+        f"⏳ Amal qilish: {passport['expiry_date']}\n\n"
+        f"✈️ {order['origin']} ➔ {order['destination']}\n"
+        f"🗓 {order['depart_date']} | 👥 {order['passengers']} yo'lovchi\n"
+        f"💵 <b>${order['price']} USD</b>\n\n"
         f"To'lov cheki kelgach tasdiqlash uchun:\n"
         f"<code>/confirm_order {order['id']}</code>"
     )
@@ -139,7 +133,7 @@ async def api_create_order(payload: dict):
     return {"order_id": order["id"]}
 
 
-# ==================== TO'LOV CHEKINI YUKLASH ====================
+# ==================== TO'LOV CHEKI ====================
 @app.post("/api/orders/{order_id}/payment")
 async def api_upload_payment(order_id: int, file: UploadFile = File(...)):
     order = db.get_order(order_id)
@@ -155,15 +149,27 @@ async def api_upload_payment(order_id: int, file: UploadFile = File(...)):
         settings.ADMIN_CHAT_ID,
         photo,
         caption=(
-            f"💳 To'lov cheki — buyurtma #{order_id}\n\n"
-            f"Tasdiqlash: /confirm_order {order_id}\n"
-            f"Rad etish: /reject_order {order_id} <sabab>"
+            f"💳 <b>To'lov cheki — buyurtma #{order_id}</b>\n\n"
+            f"Tasdiqlash: <code>/confirm_order {order_id}</code>\n"
+            f"Rad etish: <code>/reject_order {order_id} &lt;sabab&gt;</code>"
         ),
+        parse_mode="HTML"
     )
     return {"ok": True, "url": url}
 
 
-# ==================== KUNLIK AVTO-POST (tashqi cron orqali chaqiriladi) ====================
+# ==================== MIJOZNING BUYURTMALARI TARIXI ====================
+@app.get("/api/my-orders")
+async def api_my_orders(telegram_user_id: int):
+    try:
+        res = db.supabase.table("orders").select("*, passports(*)").eq("telegram_user_id", telegram_user_id).order("id", desc=True).limit(20).execute()
+        return {"orders": res.data or []}
+    except Exception as e:
+        log.exception("my-orders xatolik")
+        return {"orders": []}
+
+
+# ==================== KANALGA CHIROYLI AVTO-POST ====================
 @app.post("/api/cron/daily-post")
 async def api_daily_post(secret: str):
     if secret != settings.CRON_SECRET:
@@ -173,17 +179,37 @@ async def api_daily_post(secret: str):
     if not tickets:
         return {"posted": 0}
 
-    cheapest = sorted(tickets, key=lambda x: x.get("value") or 999999)[:3]
-    text = "🔥 <b>Bugungi eng arzon chiptalar</b>\n\n"
+    cheapest = sorted(tickets, key=lambda x: x.get("value") or 999999)[:4]
+    
+    UZS_RATE = 12850  # Taxminiy so'm kursi
+
+    text = (
+        "🕋 <b>SAUDIYA BILETLAR | BUGUNGI ENG ARZON REYSLAR</b> ✈️\n\n"
+        "Jidda va Madinaga eng hamyonbop aviachiptalar narxlari:\n\n"
+    )
+    
     for t in cheapest:
-        text += f"✈️ {t['origin']} → {t['destination']}: <b>${t['value']}</b> ({t.get('depart_date', '-')})\n"
-    text += "\nBuyurtma qilish uchun botga /start yozing 👇"
+        val = int(t.get("value", 380))
+        val_uzs = f"{val * UZS_RATE:,}".replace(",", " ")
+        text += (
+            f"🔹 <b>{t['origin']} ➔ {t['destination']}</b>\n"
+            f"   📅 Sana: <code>{t.get('depart_date', 'Yaqin kunlar')}</code>\n"
+            f"   💵 Narxi: <b>${val}</b> (~{val_uzs} so'm)\n"
+            f"   🧳 Bagaj: 30 kg + 7 kg | 🍽 Issiq taom bepul\n"
+            f"   ──────────────\n"
+        )
+
+    text += (
+        "\n⚡️ <i>Joylar soni cheklangan! Chipta band qilish uchun botga kiring:</i>\n"
+        "👉 @Saudiya_Biletlarbot\n"
+        "👤 Savollar uchun: @nuriddinovdfg"
+    )
 
     await bot.send_message(settings.CHANNEL_ID, text, parse_mode="HTML")
     return {"posted": len(cheapest)}
 
 
-# ==================== ADMIN PANEL: BUYURTMALAR ====================
+# ==================== ADMIN PANEL ====================
 @app.get("/api/admin/orders", dependencies=[Depends(verify_admin)])
 async def admin_list_orders(status: str | None = None):
     orders = db.get_orders_with_passport(status=status)
@@ -207,7 +233,6 @@ async def admin_reject_order(order_id: int, payload: dict):
     return result
 
 
-# ==================== ADMIN PANEL: QO'LDA CHIPTA QO'SHISH ====================
 @app.get("/api/admin/flights", dependencies=[Depends(verify_admin)])
 async def admin_list_flights():
     return {"flights": db.list_all_manual_flights()}
@@ -226,7 +251,7 @@ async def admin_create_flight(payload: dict):
         "depart_date": payload["depart_date"],
         "departure_time": payload.get("departure_time"),
         "price": payload["price"],
-        "airline": payload.get("airline", "Umra Chipta"),
+        "airline": payload.get("airline", "Saudiya Biletlar"),
         "flight_number": payload.get("flight_number"),
         "transfers": payload.get("transfers", 0),
         "seats_available": payload.get("seats_available"),
@@ -243,7 +268,6 @@ async def admin_delete_flight(flight_id: int):
 
 @app.post("/api/admin/login")
 async def admin_login(payload: dict):
-    """Admin panel login sahifasi shu orqali parolni tekshiradi."""
     if payload.get("password") != settings.ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Noto'g'ri parol")
     return {"ok": True}
