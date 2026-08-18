@@ -174,17 +174,267 @@ async function fetchSuggestions(term, box, input, hidden) {
 setupAutocomplete("origin", "origin_code", "origin_suggestions");
 setupAutocomplete("destination", "destination_code", "destination_suggestions");
 
-// Default sana
-const today = new Date();
-today.setDate(today.getDate() + 2);
-const departDateInput = document.getElementById("depart_date");
-if (departDateInput) {
-  departDateInput.value = today.toISOString().split("T")[0];
+const UZ_MONTHS = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
+const UZ_WEEK = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"];
+const CITY_NAMES = {
+  TAS: "Toshkent", NMA: "Namangan", SKD: "Samarqand", FEG: "Farg‘ona",
+  BHK: "Buxoro", UGC: "Urganch", JED: "Jidda", MED: "Madina",
+  RUH: "Ar-Riyod", DXB: "Dubay", IST: "Istanbul"
+};
+
+function isoDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
+function parseISODate(value) {
+  if (!value) return null;
+  const [y, m, d] = value.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+function formatUzDate(value) {
+  const d = parseISODate(value);
+  if (!d) return "Sanani tanlang";
+  return `${d.getDate()} ${UZ_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function createCalendar({ dropdownId, triggerId, labelId, inputId, minDate, startDate }) {
+  const dropdown = document.getElementById(dropdownId);
+  const trigger = document.getElementById(triggerId);
+  const label = document.getElementById(labelId);
+  const input = document.getElementById(inputId);
+  if (!dropdown || !trigger || !label || !input) return;
+
+  let view = startDate ? new Date(startDate) : new Date();
+  view.setDate(1);
+
+  function setValue(iso) {
+    input.value = iso;
+    label.textContent = formatUzDate(iso);
+  }
+
+  function render() {
+    const year = view.getFullYear();
+    const month = view.getMonth();
+    const firstDow = (new Date(year, month, 1).getDay() + 6) % 7;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const selected = input.value;
+    const todayIso = isoDate(new Date());
+    const minIso = minDate ? isoDate(minDate) : null;
+
+    let daysHtml = "";
+    for (let i = 0; i < firstDow; i++) daysHtml += `<button type="button" class="tg-cal-day muted" disabled></button>`;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const iso = isoDate(new Date(year, month, day));
+      const disabled = minIso && iso < minIso;
+      const cls = [
+        "tg-cal-day",
+        iso === selected ? "selected" : "",
+        iso === todayIso ? "today" : ""
+      ].join(" ");
+      daysHtml += `<button type="button" class="${cls}" data-iso="${iso}" ${disabled ? "disabled" : ""}>${day}</button>`;
+    }
+
+    dropdown.innerHTML = `
+      <div class="tg-cal-head">
+        <button type="button" class="tg-cal-nav" data-nav="-1">‹</button>
+        <strong>${UZ_MONTHS[month]} ${year}</strong>
+        <button type="button" class="tg-cal-nav" data-nav="1">›</button>
+      </div>
+      <div class="tg-cal-week">${UZ_WEEK.map(d => `<span>${d}</span>`).join("")}</div>
+      <div class="tg-cal-grid">${daysHtml}</div>
+    `;
+    dropdown.querySelectorAll("[data-nav]").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        view.setMonth(view.getMonth() + Number(btn.dataset.nav));
+        render();
+      });
+    });
+    dropdown.querySelectorAll(".tg-cal-day[data-iso]").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setValue(btn.dataset.iso);
+        dropdown.classList.add("hidden");
+        trigger.classList.remove("open");
+      });
+    });
+  }
+
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const willOpen = dropdown.classList.contains("hidden");
+    document.querySelectorAll(".tg-cal-dropdown").forEach(el => el.classList.add("hidden"));
+    document.querySelectorAll(".tg-cal-trigger").forEach(el => el.classList.remove("open"));
+    if (willOpen) {
+      dropdown.classList.remove("hidden");
+      trigger.classList.add("open");
+      render();
+    }
+  });
+  document.addEventListener("click", () => {
+    dropdown.classList.add("hidden");
+    trigger.classList.remove("open");
+  });
+  dropdown.addEventListener("click", (e) => e.stopPropagation());
+
+  if (startDate) setValue(isoDate(startDate));
+  render();
+}
+
+const defaultDepart = new Date();
+defaultDepart.setDate(defaultDepart.getDate() + 2);
+createCalendar({
+  dropdownId: "depart_cal",
+  triggerId: "depart_cal_trigger",
+  labelId: "depart_cal_label",
+  inputId: "depart_date",
+  minDate: new Date(),
+  startDate: defaultDepart,
+});
+createCalendar({
+  dropdownId: "expiry_cal",
+  triggerId: "expiry_cal_trigger",
+  labelId: "expiry_cal_label",
+  inputId: "p_expiry",
+  minDate: new Date(),
+  startDate: null,
+});
+
 const defaultOrigin = document.getElementById("origin");
 if (defaultOrigin) defaultOrigin.value = "Toshkent (TAS)";
 const defaultDest = document.getElementById("destination");
 if (defaultDest) defaultDest.value = "Jidda (JED)";
+
+// ==================== 3D TO'LOV KARTASI ====================
+function init3DCard() {
+  const scene = document.getElementById("card-3d-scene");
+  const card = document.getElementById("card-3d");
+  if (!scene || !card) return;
+
+  const tilt = (x, y) => {
+    const rect = scene.getBoundingClientRect();
+    const px = (x - rect.left) / rect.width - 0.5;
+    const py = (y - rect.top) / rect.height - 0.5;
+    card.style.transform = `rotateY(${px * 22}deg) rotateX(${-py * 16}deg)`;
+  };
+  scene.addEventListener("mousemove", (e) => tilt(e.clientX, e.clientY));
+  scene.addEventListener("touchmove", (e) => {
+    if (!e.touches[0]) return;
+    tilt(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  const reset = () => { card.style.transform = "rotateY(0deg) rotateX(0deg)"; };
+  scene.addEventListener("mouseleave", reset);
+  scene.addEventListener("touchend", reset);
+
+  const numberEl = document.getElementById("card-number");
+  if (numberEl) {
+    numberEl.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(numberEl.textContent.replace(/\s+/g, ""));
+        tg.showAlert("Karta raqami nusxalandi.");
+      } catch (e) {
+        tg.showAlert(numberEl.textContent);
+      }
+    });
+  }
+
+  fetch(`${API_BASE_URL}/api/payment-info`)
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (!data) return;
+      if (data.card_number && numberEl) numberEl.textContent = data.card_number;
+      const ownerEl = document.getElementById("card-owner");
+      if (data.card_owner && ownerEl) ownerEl.textContent = data.card_owner;
+    })
+    .catch(() => {});
+}
+init3DCard();
+
+function parseFlightData(raw) {
+  if (!raw) return {};
+  if (typeof raw === "string") {
+    try { return JSON.parse(raw) || {}; } catch (e) { return {}; }
+  }
+  return typeof raw === "object" ? raw : {};
+}
+function seatFromId(id) {
+  const n = Number(id) || 1;
+  return `${8 + (n % 22)}${"ABCDEF"[n % 6]}`;
+}
+function gateFromDest(dest, id) {
+  const map = { JED: "C12", MED: "B07", RUH: "A04" };
+  return map[(dest || "").toUpperCase()] || `D${String(((Number(id) || 1) % 18) + 1).padStart(2, "0")}`;
+}
+function boardingPassHTML(order, passport, opts = {}) {
+  const origin = (order.origin || state.origin || "TAS").toUpperCase();
+  const dest = (order.destination || state.destination || "JED").toUpperCase();
+  const flight = parseFlightData(order.flight_data || state.selectedFlight);
+  const name = `${passport.first_name || ""} ${passport.last_name || ""}`.trim().toUpperCase() || "YO'LOVCHI";
+  const seat = seatFromId(order.id || 1);
+  const gate = gateFromDest(dest, order.id);
+  const pnr = `SA${String(order.id || 0).padStart(4, "0")}U`;
+  const dep = flight.departure_time || "09:30";
+  const date = order.depart_date || state.departDate || "-";
+  const st = opts.status || order.status || "new";
+  const stMap = {
+    new: { t: "KO‘RIB CHIQILMOQDA", c: "" },
+    awaiting_confirmation: { t: "TO‘LOV TEKSHIRILMOQDA", c: "" },
+    confirmed: { t: "TASDIQLANGAN · BOARDING PASS", c: "ok" },
+    rejected: { t: "RAD ETILGAN", c: "bad" },
+  };
+  const badge = stMap[st] || stMap.new;
+  return `
+    <article class="bp-ticket ${st !== "confirmed" ? "pending" : ""}">
+      <div class="bp-main">
+        <div class="bp-kicker">
+          <span>SAUDIYA BILETLAR</span>
+          <span>${flight.airline || "Saudiya Biletlar"} · ${flight.flight_number || "SAU-777"}</span>
+        </div>
+        <div class="bp-route">
+          <div>
+            <div class="bp-iata">${origin}</div>
+            <div class="bp-city">${CITY_NAMES[origin] || origin}</div>
+          </div>
+          <div class="bp-plane">✈</div>
+          <div style="text-align:right;">
+            <div class="bp-iata">${dest}</div>
+            <div class="bp-city">${CITY_NAMES[dest] || dest}</div>
+          </div>
+        </div>
+        <div class="bp-grid">
+          <div class="bp-cell"><span>YO‘LOVCHI</span><strong>${name}</strong></div>
+          <div class="bp-cell"><span>SANA</span><strong>${date}</strong></div>
+          <div class="bp-cell"><span>UCHISH</span><strong>${dep}</strong></div>
+          <div class="bp-cell"><span>PNR</span><strong>${pnr}</strong></div>
+          <div class="bp-cell"><span>DARVOZA</span><strong>${gate}</strong></div>
+          <div class="bp-cell"><span>O‘RINDIQ</span><strong>${seat}</strong></div>
+        </div>
+        <span class="bp-status ${badge.c}">${badge.t}</span>
+      </div>
+      <div class="bp-stub">
+        <div class="bp-stub-title">BOARDING</div>
+        <div>
+          <div class="bp-stub-seat">${seat}</div>
+          <div class="bp-stub-gate">GATE ${gate}</div>
+        </div>
+        <div class="bp-bars" aria-hidden="true"></div>
+      </div>
+    </article>
+  `;
+}
+window.closeBoardingPass = function() {
+  const modal = document.getElementById("bp-modal");
+  if (modal) modal.classList.add("hidden");
+};
+window.openBoardingPass = function(html) {
+  const modal = document.getElementById("bp-modal");
+  const body = document.getElementById("bp-modal-body");
+  if (body) body.innerHTML = html;
+  if (modal) modal.classList.remove("hidden");
+};
 
 // ==================== ZAXIRA REYSLAR BAZASI (KO'P BILETLAR CHIQISHI UCHUN) ====================
 function generateComprehensiveFlights(origin, destination, date) {
@@ -460,6 +710,21 @@ if (btnSubmitOrder) {
 
       const successOrderIdEl = document.getElementById("success-order-id");
       if (successOrderIdEl) successOrderIdEl.textContent = state.lastOrderId;
+      const preview = document.getElementById("success-boarding-pass");
+      if (preview) {
+        preview.innerHTML = boardingPassHTML(
+          {
+            id: state.lastOrderId,
+            origin: state.origin,
+            destination: state.destination,
+            depart_date: state.departDate,
+            flight_data: state.selectedFlight,
+            status: "awaiting_confirmation",
+          },
+          state.passport || {},
+          { status: "awaiting_confirmation" }
+        );
+      }
       showScreen("screen-success");
     } catch (e) {
       tg.showAlert("Buyurtmani yuborishda xatolik yuz berdi. Qayta urinib ko'ring.");
@@ -501,33 +766,13 @@ async function loadUserOrders() {
       return;
     }
 
-    const STATUS_MAP = {
-      new: { label: "🆕 Yangi", class: "st-new" },
-      awaiting_confirmation: { label: "⏳ Tasdiqlanmoqda", class: "st-new" },
-      confirmed: { label: "✅ Tasdiqlangan", class: "st-confirmed" },
-      rejected: { label: "❌ Rad etilgan", class: "st-rejected" }
-    };
-
     orders.forEach(o => {
-      const passport = (o.passports && o.passports[0]) || o.passports || {};
-      const st = STATUS_MAP[o.status] || { label: o.status || "Noma'lum", class: "st-new" };
-      const origin = (o.origin || "-").toUpperCase();
-      const destination = (o.destination || "-").toUpperCase();
-      const card = document.createElement("div");
-      card.className = "tg-user-order-card";
-      card.innerHTML = `
-        <div class="flex-between" style="margin-bottom:6px;">
-          <div style="font-weight:800; font-size:14px;">#${o.id} — ✈️ ${origin} ➔ ${destination}</div>
-          <span class="tg-order-status-badge ${st.class}">${st.label}</span>
-        </div>
-        <div style="font-size:12px; color:var(--text-muted);">
-          👤 ${passport.first_name || ""} ${passport.last_name || ""} · 🛂 ${passport.passport_number || "-"}
-        </div>
-        <div style="font-size:12px; color:var(--text-muted); margin-top:3px;">
-          📅 ${o.depart_date} · 👥 ${o.passengers || 1} yo'lovchi · 💵 <strong>$${o.price}</strong>
-        </div>
-      `;
-      list.appendChild(card);
+      const passport = (Array.isArray(o.passports) && o.passports[0]) || (o.passports && typeof o.passports === "object" ? o.passports : {}) || {};
+      const wrap = document.createElement("div");
+      wrap.innerHTML = boardingPassHTML(o, passport);
+      wrap.style.cursor = "pointer";
+      wrap.addEventListener("click", () => openBoardingPass(boardingPassHTML(o, passport)));
+      list.appendChild(wrap);
     });
   } catch (e) {
     list.innerHTML = `<div style="text-align:center; padding:20px; font-size:13px; color:var(--danger);">Buyurtmalarni yuklashda xato yuz berdi.</div>`;

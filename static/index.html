@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body class="tg-body">
 
@@ -72,7 +72,14 @@
           <div class="tg-grid-2">
             <div>
               <label class="tg-label">Jo'nash sanasi</label>
-              <input id="depart_date" type="date" class="tg-input">
+              <div class="tg-cal-wrap" id="depart_cal_wrap">
+                <button type="button" class="tg-cal-trigger" id="depart_cal_trigger" aria-label="Taqvimni ochish">
+                  <span id="depart_cal_label">Sanani tanlang</span>
+                  <span class="tg-cal-ico">📅</span>
+                </button>
+                <div class="tg-cal-dropdown hidden" id="depart_cal"></div>
+                <input type="hidden" id="depart_date">
+              </div>
             </div>
             <div>
               <label class="tg-label">Yo'lovchilar soni</label>
@@ -149,7 +156,14 @@
           </div>
 
           <label class="tg-label">Pasport amal qilish muddati</label>
-          <input id="p_expiry" type="date" class="tg-input">
+          <div class="tg-cal-wrap" id="expiry_cal_wrap">
+            <button type="button" class="tg-cal-trigger" id="expiry_cal_trigger" aria-label="Pasport muddati taqvimi">
+              <span id="expiry_cal_label">Sanani tanlang</span>
+              <span class="tg-cal-ico">📅</span>
+            </button>
+            <div class="tg-cal-dropdown hidden" id="expiry_cal"></div>
+            <input type="hidden" id="p_expiry">
+          </div>
 
           <button id="btn-to-payment" class="tg-btn-primary">Davom etish (To'lovga o'tish) ➔</button>
         </div>
@@ -162,11 +176,33 @@
           <h2 class="tg-card-title">💳 To'lovni Amalga Oshirish</h2>
           <p class="tg-text">Quyidagi karta hisobiga to'lov qiling va chek skrinshotini yuklang:</p>
           
-          <div class="tg-card-box">
-            <div class="tg-card-chip">💳 UZCARD / HUMO / VISA</div>
-            <div class="tg-card-number" id="card-number">8600 0000 0000 0000</div>
-            <div class="tg-card-owner" id="card-owner">Karta egasi: SAUDIYA BILETLAR</div>
+          <div class="card-3d-scene" id="card-3d-scene">
+            <div class="card-3d" id="card-3d">
+              <div class="card-3d-shine"></div>
+              <div class="card-3d-top">
+                <span class="card-3d-bank">SAUDIYA BILETLAR</span>
+                <span class="card-3d-scheme">UZCARD / HUMO</span>
+              </div>
+              <div class="card-3d-chip-row">
+                <div class="card-3d-chip"></div>
+                <div class="card-3d-wave" aria-hidden="true">
+                  <span></span><span></span><span></span>
+                </div>
+              </div>
+              <div class="card-3d-number" id="card-number">8600 0000 0000 0000</div>
+              <div class="card-3d-bottom">
+                <div>
+                  <div class="card-3d-mini">KARTA EGASI</div>
+                  <div class="card-3d-owner" id="card-owner">SAUDIYA BILETLAR</div>
+                </div>
+                <div class="card-3d-valid">
+                  <div class="card-3d-mini">AMAL QILADI</div>
+                  <div>12/30</div>
+                </div>
+              </div>
+            </div>
           </div>
+          <p class="tg-hint" style="margin-top:8px;">Kartani barmoq bilan siljitib 3D ko‘rinishda ko‘ring. Raqamni bosib nusxa oling.</p>
 
           <label class="tg-label">To'lov cheki (Skrinshot)</label>
           <input id="payment_file" type="file" accept="image/*" class="tg-input">
@@ -301,6 +337,14 @@
 
   </main>
 
-  <script src="app.js?v=8"></script>
+  <!-- Boarding pass modal -->
+  <div id="bp-modal" class="bp-modal hidden" onclick="if(event.target===this) closeBoardingPass()">
+    <div class="bp-modal-inner">
+      <button type="button" class="bp-modal-close" onclick="closeBoardingPass()">✕</button>
+      <div id="bp-modal-body"></div>
+    </div>
+  </div>
+
+  <script src="app.js?v=9"></script>
 </body>
 </html>

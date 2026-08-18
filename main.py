@@ -336,6 +336,15 @@ async def api_health():
     return {"status": "ok", "service": "Saudiya Biletlar backend faol ishlayapti"}
 
 
+@app.get("/api/payment-info")
+async def api_payment_info():
+    return {
+        "card_number": settings.PAYMENT_CARD_NUMBER,
+        "card_owner": settings.PAYMENT_CARD_OWNER,
+        "admin_username": settings.ADMIN_USERNAME,
+    }
+
+
 # ==================== MINI APP FRONTEND STATIC MOUNT ====================
 if os.path.exists("static"):
     app.mount("/", StaticFiles(directory="static", html=True), name="static")

@@ -14,6 +14,9 @@ async def test_root_endpoint():
         res = await ac.get("/")
     assert res.status_code == 200
     assert "Saudiya Biletlar" in res.text
+    assert "tg-cal-dropdown" in res.text
+    assert "card-3d" in res.text
+    assert "bp-modal" in res.text
 
 
 @pytest.mark.asyncio
@@ -69,6 +72,17 @@ async def test_daily_post_cron():
             assert res2.status_code == 200
             assert res2.json()["posted"] == 1
             mock_send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_payment_info_endpoint():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        res = await ac.get("/api/payment-info")
+    assert res.status_code == 200
+    data = res.json()
+    assert "card_number" in data
+    assert "card_owner" in data
 
 
 @pytest.mark.asyncio
