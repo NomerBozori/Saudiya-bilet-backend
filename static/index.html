@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=11">
+<link rel="stylesheet" href="style.css?v=12">
 </head>
 <body class="tg-body">
 
@@ -51,6 +51,24 @@
       
       <!-- SCREEN 1: Qidiruv Formasi -->
       <section id="screen-search" class="tg-screen">
+
+        <!-- 🔥 AVTO NARX TAVSIYALARI — qidiruvdan oldin eng arzon takliflar -->
+        <div class="deals-wrap" id="deals-wrap">
+          <div class="deals-head">
+            <div>
+              <span class="deals-title">🔥 Bugungi Eng Arzon Takliflar</span>
+              <span class="deals-sub" id="deals-sub">Narxlar avtomatik yangilanmoqda...</span>
+            </div>
+            <button type="button" class="deals-refresh" id="deals-refresh" title="Narxlarni yangilash">🔄</button>
+          </div>
+          <div class="deals-strip" id="deals-strip">
+            <div class="deals-skeleton"></div>
+            <div class="deals-skeleton"></div>
+            <div class="deals-skeleton"></div>
+          </div>
+          <p class="deals-hint">👆 Taklifni bosing — yo'nalish va sana avtomatik tanlanadi</p>
+        </div>
+
         <div class="tg-card">
           <div class="tg-card-header">
             <h2 class="tg-card-title">🔍 Aviachiptalarni Qidirish</h2>
@@ -382,6 +400,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 """Yangi funksiyalar uchun testlar: avto-post, taqvim, inline tugmalar, admin panel."""
 import os
+from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -77,6 +78,111 @@ async def test_daily_post_mixes_all_airports():
     for code in tp.UZ_AIRPORTS:
         assert code in text
     assert "JED" in text and "MED" in text
+
+
+# ==================== 1B. AVTO-POST SANA OYNASI: 3–35 KUN ====================
+def test_window_constants():
+    assert tp.MIN_DAYS_AHEAD == 3
+    assert tp.MAX_DAYS_AHEAD == 35
+
+
+def test_is_within_window():
+    today = date(2026, 8, 21)
+    assert tp.is_within_window("2026-08-24", today=today) is True   # +3 kun
+    assert tp.is_within_window("2026-09-25", today=today) is True   # +35 kun
+    assert tp.is_within_window("2026-08-22", today=today) is False  # +1 kun (juda yaqin)
+    assert tp.is_within_window("2026-09-26", today=today) is False  # +36 kun
+    assert tp.is_within_window("2026-12-15", today=today) is False  # uzoq dekabr
+    assert tp.is_within_window("2027-01-10", today=today) is False  # uzoq yanvar
+    assert tp.is_within_window("2026-08-01", today=today) is False  # o'tgan sana
+    assert tp.is_within_window(None, today=today) is False
+
+
+def test_filter_offers_by_window_drops_far_dates():
+    today = date(2026, 8, 21)
+    offers = [
+        {"origin": "TAS", "destination": "JED", "value": 300, "depart_date": "2026-09-01"},
+        {"origin": "NMA", "destination": "MED", "value": 280, "depart_date": "2026-12-20"},
+        {"origin": "SKD", "destination": "JED", "value": 290, "depart_date": "2027-01-05"},
+        {"origin": "FEG", "destination": "MED", "value": 310, "depart_date": None},
+    ]
+    kept = tp.filter_offers_by_window(offers, today=today)
+    assert [o["origin"] for o in kept] == ["TAS"]
+    assert kept[0]["days_left"] == 11
+    assert kept[0]["depart_date_label"].startswith("01.09.2026")
+
+
+def test_fallback_offers_only_inside_window():
+    today = date.today()
+    offers = tp.build_fallback_offers()
+    assert offers, "Zaxira takliflar bo'sh bo'lmasligi kerak"
+    for o in offers:
+        left = (date.fromisoformat(o["depart_date"]) - today).days
+        assert tp.MIN_DAYS_AHEAD <= left <= tp.MAX_DAYS_AHEAD, f"{o['origin']} sanasi oynadan tashqarida"
+
+
+def test_top_up_missing_cities_fills_all_airports():
+    offers = [{"origin": "TAS", "destination": "JED", "value": 300,
+               "depart_date": (date.today() + timedelta(days=5)).isoformat()}]
+    topped = tp.top_up_missing_cities(offers)
+    origins = {o["origin"] for o in topped}
+    assert origins == set(tp.UZ_AIRPORTS)
+    assert len([o for o in topped if o["origin"] == "TAS"]) == 1, "Mavjud shahar takrorlanmasligi kerak"
+
+
+def test_format_date_uz():
+    assert tp.format_date_uz("2026-08-21") == "21.08.2026 (Juma)"
+
+
+@pytest.mark.asyncio
+async def test_daily_post_excludes_far_dates():
+    """API uzoq dekabr/yanvar sanalarini qaytarsa ham, postga tushmasligi kerak."""
+    soon = (date.today() + timedelta(days=7)).isoformat()
+    far = (date.today() + timedelta(days=120)).isoformat()
+    api_offers = [
+        {"origin": "TAS", "destination": "JED", "value": 300, "depart_date": soon},
+        {"origin": "NMA", "destination": "MED", "value": 250, "depart_date": far},
+    ]
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        with patch("travelpayouts.get_daily_cheapest", new=AsyncMock(return_value=api_offers)), \
+             patch("main.get_cbu_usd_rate", new=AsyncMock(return_value={"rate": 12500.0})), \
+             patch("main.bot.send_message", new_callable=AsyncMock) as mock_send:
+            res = await ac.post("/api/cron/daily-post?secret=testcron")
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["window"] == {"min_days": 3, "max_days": 35}
+    assert far not in body["dates"], "Uzoq sana postga tushmasligi kerak"
+    assert soon in body["dates"]
+
+    today = date.today()
+    for iso in body["dates"]:
+        left = (date.fromisoformat(iso) - today).days
+        assert 3 <= left <= 35
+
+    text = mock_send.await_args.args[1]
+    assert "2026-12" not in text and "2027-01" not in text
+    assert len(set(body["cities"])) == 11
+
+
+@pytest.mark.asyncio
+async def test_get_daily_cheapest_filters_api_dates():
+    soon = (date.today() + timedelta(days=9)).isoformat()
+    far = (date.today() + timedelta(days=200)).isoformat()
+
+    async def fake_route(client, origin, destination, min_days, max_days, today=None):
+        return [
+            {"origin": origin, "destination": destination, "value": 300, "depart_date": soon},
+            {"origin": origin, "destination": destination, "value": 200, "depart_date": far},
+        ]
+
+    with patch.object(tp, "_fetch_route_offers", new=fake_route):
+        offers = await tp.get_daily_cheapest(origins=["TAS"], destinations=["JED"])
+
+    assert len(offers) == 1
+    assert offers[0]["depart_date"] == soon
 
 
 # ==================== 2. ARZON NARXLAR TAQVIMI ====================
@@ -327,3 +433,75 @@ async def test_export_csv_and_xlsx():
     assert xlsx_res.status_code == 200
     assert ".xlsx" in xlsx_res.headers["content-disposition"]
     assert xlsx_res.content[:2] == b"PK"
+
+
+# ==================== 9. AVTO NARX TAVSIYALARI (TOP DEALS) ====================
+@pytest.mark.asyncio
+async def test_top_deals_endpoint():
+    """Mini App ochilishida arzon takliflar avtomatik keladi (3–35 kun ichida)."""
+    main._deals_cache.update({"data": None, "ts": 0})
+    soon = (date.today() + timedelta(days=6)).isoformat()
+    far = (date.today() + timedelta(days=150)).isoformat()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        with patch("travelpayouts.get_daily_cheapest", new=AsyncMock(return_value=[
+                 {"origin": "TAS", "destination": "JED", "value": 289, "depart_date": soon},
+                 {"origin": "NMA", "destination": "MED", "value": 199, "depart_date": far},
+             ])), \
+             patch("main.get_cbu_usd_rate", new=AsyncMock(return_value={"rate": 12850.0})):
+            res = await ac.get("/api/top-deals?limit=5")
+
+    assert res.status_code == 200
+    data = res.json()
+    deals = data["deals"]
+    assert 1 <= len(deals) <= 5
+    assert data["window"] == {"min_days": 3, "max_days": 35}
+    # Eng arzoni birinchi va belgilangan
+    assert deals[0]["is_cheapest"] is True
+    assert deals[0]["price"] == min(d["price"] for d in deals)
+    # Uzoq sana (150 kun) taklifga tushmasligi kerak
+    assert all(d["depart_date"] != far for d in deals)
+    today = date.today()
+    for d in deals:
+        left = (date.fromisoformat(d["depart_date"]) - today).days
+        assert 3 <= left <= 35
+        assert d["origin_name"] and d["destination_name"]
+        assert d["depart_date_label"]
+
+
+@pytest.mark.asyncio
+async def test_top_deals_uses_cache():
+    """Narxlar 30 daqiqa keshlanadi — API har safar bezovta qilinmaydi."""
+    main._deals_cache.update({"data": None, "ts": 0})
+    soon = (date.today() + timedelta(days=5)).isoformat()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        with patch("travelpayouts.get_daily_cheapest", new=AsyncMock(return_value=[
+                 {"origin": "TAS", "destination": "JED", "value": 300, "depart_date": soon},
+             ])) as mock_api, \
+             patch("main.get_cbu_usd_rate", new=AsyncMock(return_value={"rate": 12850.0})):
+            await ac.get("/api/top-deals")
+            await ac.get("/api/top-deals")
+            assert mock_api.await_count == 1
+            await ac.get("/api/top-deals?refresh=true")
+            assert mock_api.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_miniapp_has_deals_block_and_no_cache_headers():
+    """Tavsiyalar bloki Mini Appda bor va statik fayllar keshlanmaydi."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        html_res = await ac.get("/")
+        js_res = await ac.get("/app.js")
+        css_res = await ac.get("/style.css")
+
+    html, js, css = html_res.text, js_res.text, css_res.text
+    assert 'id="deals-strip"' in html
+    assert "🔥 Bugungi Eng Arzon Takliflar" in html
+    assert "loadTopDeals" in js and "applyDeal" in js
+    assert ".deal-card" in css
+    # Telegram eski dizaynni keshlab qolmasligi uchun
+    for res in (html_res, js_res, css_res):
+        assert "no-store" in res.headers.get("cache-control", "")
