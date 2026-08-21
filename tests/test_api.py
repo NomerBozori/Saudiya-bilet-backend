@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -65,12 +66,19 @@ async def test_daily_post_cron():
         res1 = await ac.post("/api/cron/daily-post?secret=wrong")
         assert res1.status_code == 403
 
-        # Valid secret with mocked tp
-        with patch("travelpayouts.get_daily_cheapest", return_value=[{"origin": "TAS", "destination": "JED", "value": 350, "depart_date": "2026-09-01"}]), \
+        # Valid secret with mocked tp — yaqin (10 kundan keyingi) sana
+        soon = (date.today() + timedelta(days=10)).isoformat()
+        with patch("travelpayouts.get_daily_cheapest", new=AsyncMock(return_value=[
+                 {"origin": "TAS", "destination": "JED", "value": 350, "depart_date": soon}
+             ])), \
+             patch("main.get_cbu_usd_rate", new=AsyncMock(return_value={"rate": 12500.0})), \
              patch("main.bot.send_message", new_callable=AsyncMock) as mock_send:
             res2 = await ac.post("/api/cron/daily-post?secret=testcron")
             assert res2.status_code == 200
-            assert res2.json()["posted"] == 1
+            body = res2.json()
+            # Qolgan shaharlar zaxira takliflar bilan to'ldiriladi -> 11 ta aeroport
+            assert body["posted"] == 11
+            assert soon in body["dates"]
             mock_send.assert_awaited_once()
 
 

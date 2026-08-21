@@ -1,0 +1,110 @@
+# 🕋 Saudiya Biletlar — Backend + Telegram Bot + Mini App
+
+Umra va ziyorat reyslari uchun aviachipta xizmati: FastAPI backend, aiogram Telegram bot,
+Telegram Mini App (statik frontend) va admin boshqaruv paneli.
+
+---
+
+## ✨ Asosiy funksiyalar
+
+### 1. Avto-post sanalari — faqat yaqin 3–35 kun
+Kanalga chiqadigan kunlik post endi **faqat bugundan 3 kundan 35 kungacha** bo'lgan reyslarni ko'rsatadi.
+Uzoq dekabr/yanvar sanalari umuman tushmaydi.
+
+- `travelpayouts.MIN_DAYS_AHEAD = 3`, `travelpayouts.MAX_DAYS_AHEAD = 35`
+- `filter_offers_by_window()` — sanasi yo'q yoki oynadan tashqaridagi takliflarni o'chiradi
+- `_fetch_window_for_route()` — Travelpayouts `prices_for_dates` (v3) orqali aniq sanali narxlar
+  oyma-oy so'raladi, so'ng qat'iy filtrlanadi; API bo'sh qaytarsa `prices/latest` (v2) zaxira sifatida
+  ishlatiladi va u ham filtrdan o'tadi
+- Post matnida sana o'zbekcha ko'rinishda: `24.08.2026 (Dushanba) — 3 kundan keyin`
+- Oynani so'rovda o'zgartirish mumkin: `/api/cron/daily-post?secret=...&min_days=3&max_days=35`
+
+### 2. O'zbekistonning 11 ta aeroporti — aralash reyslar
+`TAS, NMA, SKD, FEG, BHK, AZN, UGC, TMJ, NVI, KSQ, NCU` → `JED` va `MED`.
+
+- `pick_mixed_offers()` — bitta shahar ikki marta takrorlanmaydi, Jidda/Madina navbatma-navbat aralashadi
+- `top_up_missing_cities()` — API'dan tushmagan shaharlar 3–35 kunlik zaxira takliflar bilan
+  to'ldiriladi, shuning uchun postda har doim 11 ta aeroport qatnashadi
+
+### 3. Arzon narxlar taqvimi — `GET /api/calendar`
+Mini Appdagi gorizontal taqvim: har bir kun uchun eng arzon narx, eng arzon kun alohida belgilanadi.
+
+```
+GET /api/calendar?origin=TAS&destination=JED&start_date=2026-09-01&days=30
+```
+Qo'lda qo'shilgan (manual) chiptalar API narxidan arzon bo'lsa — taqvimda ular ustun turadi.
+
+### 4. Telegram admin 1-click inline tugmalari
+Yangi buyurtma va to'lov cheki xabari tagida: **[✅ Tasdiqlash & PDF]** va **[❌ Rad etish]**.
+
+- Tasdiqlash — PDF chiptani generatsiya qilib mijozga yuboradi va statusni `confirmed` qiladi
+- Rad etish — tasodifan bosilmasligi uchun ikkinchi bosqich: **[🚫 Ha, rad etilsin] / [↩️ Bekor qilish]**
+- Tugmalarni faqat admin (yoki admin guruhi) bosa oladi
+
+### 5. Boarding pass ko'rinishidagi chiptalar
+Mini App qidiruv natijalari va buyurtmalar tarixi haqiqiy parvoz chiptasi (boarding pass) dizaynida:
+perforatsiya, stub qismi, IATA kodlari, gate/seat/bagaj maydonlari, bosish orqali kattalashadigan modal.
+
+### 6. 3D virtual bank kartasi + 📋 Nusxalash
+To'lov oynasida 3D effektli (parallax) UZCARD/HUMO kartasi. Karta raqami va egasi yonida
+**[📋 Nusxalash]** tugmasi — bir bosishda clipboardga nusxalanadi (Telegram WebApp haptic + toast bilan).
+
+### 7. Admin panel
+- 🗑 **O'chirish** — har bir buyurtma uchun (tasdiqlash modali bilan)
+- 🗑 **Rad etilganlarni tozalash** — barcha `rejected` buyurtmalarni bir bosishda o'chiradi
+- 📊 **Excel yuklab olish** — CSV (UTF-8 BOM) va formatlangan `.xlsx` (openpyxl)
+- 💱 **Markaziy Bank (CBU) jonli kursi** — `cbu.uz`dan 30 daqiqalik kesh bilan, tushum so'mda ham ko'rsatiladi
+
+### 8. `/admin` → `/admin/` avtomatik redirect
+StaticFiles mountdan oldin e'lon qilingan `307` redirect — panel har doim ochiladi.
+
+---
+
+## 🔌 API endpointlari
+
+| Metod | Yo'l | Tavsif |
+|-------|------|--------|
+| `GET` | `/api/health` | Servis holati |
+| `GET` | `/api/search` | Chipta qidirish (manual + Travelpayouts) |
+| `GET` | `/api/calendar` | Arzon narxlar taqvimi |
+| `GET` | `/api/cbu-rate` | Markaziy Bank USD kursi |
+| `POST` | `/api/orders` | Buyurtma yaratish (adminga inline tugmali xabar) |
+| `POST` | `/api/orders/{id}/payment` | To'lov chekini yuklash |
+| `GET` | `/api/my-orders` | Mijoz buyurtmalari tarixi |
+| `GET` | `/api/payment-info` | Karta ma'lumotlari |
+| `GET/POST` | `/api/cron/daily-post` | Kanalga kunlik avto-post (3–35 kun oynasi) |
+| `GET` | `/api/admin/orders` | Buyurtmalar ro'yxati |
+| `GET` | `/api/admin/orders/export?format=csv\|xlsx` | Excel/CSV eksport |
+| `POST` | `/api/admin/orders/{id}/confirm` | Tasdiqlash + PDF |
+| `POST` | `/api/admin/orders/{id}/reject` | Rad etish |
+| `POST` | `/api/admin/orders/clear-rejected` | Rad etilganlarni tozalash |
+| `DELETE` | `/api/admin/orders/{id}` | Buyurtmani o'chirish |
+| `GET/POST/DELETE` | `/api/admin/flights` | Qo'lda chipta qo'shish/o'chirish |
+
+Admin endpointlari `X-Admin-Password` sarlavhasini talab qiladi.
+
+---
+
+## 🚀 Ishga tushirish
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp env.example .env      # kerakli qiymatlarni to'ldiring
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+- Mini App: `http://localhost:8000/`
+- Admin panel: `http://localhost:8000/admin` (avtomatik `/admin/` ga o'tadi)
+
+### Kunlik avto-post (cron)
+```
+curl -X POST "https://<domen>/api/cron/daily-post?secret=$CRON_SECRET"
+```
+
+## 🧪 Testlar
+
+```bash
+pip install pytest pytest-asyncio
+pytest tests -q
+```

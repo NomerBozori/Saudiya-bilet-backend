@@ -343,24 +343,46 @@ async def api_calendar(
 # ==================== KANALGA CHIROYLI AVTO-POST ====================
 @app.post("/api/cron/daily-post")
 @app.get("/api/cron/daily-post")
-async def api_daily_post(secret: str = "", limit: int = 11):
-    """O'zbekistonning 11 ta xalqaro aeroportidan Jidda va Madinaga aralash reyslar posti."""
+async def api_daily_post(
+    secret: str = "",
+    limit: int = 11,
+    min_days: int = tp.MIN_DAYS_AHEAD,
+    max_days: int = tp.MAX_DAYS_AHEAD,
+):
+    """O'zbekistonning 11 ta xalqaro aeroportidan Jidda va Madinaga aralash reyslar posti.
+
+    Faqat yaqin `min_days`–`max_days` (sukut bo'yicha 3–35) kun ichidagi sanalar chiqadi —
+    uzoq dekabr/yanvar sanalari postga tushmaydi.
+    """
     if secret != settings.CRON_SECRET:
         raise HTTPException(status_code=403, detail="Ruxsat yo'q")
 
+    # Sana oynasini xavfsiz chegaralarga keltiramiz
+    min_days = max(0, int(min_days))
+    max_days = max(min_days, int(max_days))
+
     try:
-        tickets = await tp.get_daily_cheapest()
+        tickets = await tp.get_daily_cheapest(min_days=min_days, max_days=max_days)
     except Exception:
         log.exception("Kunlik narxlarni olishda xatolik")
         tickets = []
 
-    valid_tickets = [t for t in (tickets or []) if t.get("value") is not None]
+    # 1) Faqat narxi bor va sanasi 3–35 kun oynasiga tushadigan takliflar
+    valid_tickets = tp.filter_offers_by_window(
+        [t for t in (tickets or []) if t.get("value") is not None],
+        min_days=min_days,
+        max_days=max_days,
+    )
 
-    used_fallback = False
-    if not valid_tickets:
-        # API javob bermasa ham kanal bo'sh qolmasin — taxminiy narxlar bilan post ketadi
-        valid_tickets = tp.build_fallback_offers()
-        used_fallback = True
+    used_fallback = not valid_tickets
+
+    # 2) API'dan tushmagan shaharlar zaxira (taxminiy) narxlar bilan to'ldiriladi,
+    #    shunda kanal bo'sh qolmaydi va 11 ta aeroport ham qatnashadi
+    valid_tickets = tp.top_up_missing_cities(
+        valid_tickets,
+        min_days=min_days,
+        max_days=max_days,
+    )
 
     # Turfa xil aralash reyslar: bitta shahar (aeroport) takrorlanmaydi
     selected = tp.pick_mixed_offers(valid_tickets, limit=max(1, min(int(limit or 11), 11)))
@@ -373,7 +395,8 @@ async def api_daily_post(secret: str = "", limit: int = 11):
     today_str = datetime.now().strftime("%d.%m.%Y")
     text = (
         "🕋 <b>SAUDIYA BILETLAR | BUGUNGI ENG ARZON REYSLAR</b> ✈️\n"
-        f"📆 <i>{today_str}</i> — O'zbekistonning barcha aeroportlaridan Jidda va Madinaga:\n\n"
+        f"📆 <i>{today_str}</i> — O'zbekistonning barcha aeroportlaridan Jidda va Madinaga\n"
+        f"🗓 <i>Faqat yaqin {min_days}–{max_days} kun ichidagi reyslar:</i>\n\n"
     )
 
     for t in selected:
@@ -384,9 +407,14 @@ async def api_daily_post(secret: str = "", limit: int = 11):
         origin_name = t.get("origin_name") or tp.city_name(origin)
         dest_name = t.get("destination_name") or tp.city_name(dest)
         dest_icon = "🕋" if dest == "MED" else "🌅"
+        date_label = t.get("depart_date_label") or tp.format_date_uz(t.get("depart_date"))
+        days_left = t.get("days_left")
+        if days_left is None:
+            days_left = tp.days_until(t.get("depart_date"))
+        days_note = f" — {days_left} kundan keyin" if days_left is not None else ""
         text += (
             f"{dest_icon} <b>{origin_name} ({origin}) ➔ {dest_name} ({dest})</b>\n"
-            f"   📅 Sana: <code>{t.get('depart_date') or 'Yaqin kunlar'}</code>\n"
+            f"   📅 Sana: <code>{date_label}</code>{days_note}\n"
             f"   💵 Narxi: <b>${val}</b> (~{val_uzs} so'm)\n"
             f"   🧳 Bagaj: 30 kg + 7 kg | 🍽 Issiq taom bepul\n"
             f"   ──────────────\n"
@@ -404,7 +432,9 @@ async def api_daily_post(secret: str = "", limit: int = 11):
         return {
             "posted": len(selected),
             "fallback": used_fallback,
+            "window": {"min_days": min_days, "max_days": max_days},
             "cities": [str(t.get("origin") or "").upper() for t in selected],
+            "dates": [t.get("depart_date") for t in selected],
         }
     except Exception as e:
         log.exception("Kanalga post yuborishda xatolik")

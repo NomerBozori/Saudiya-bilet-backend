@@ -62,6 +62,17 @@ UZ_AIRPORTS: list[str] = [
 # Saudiya yo'nalishlari (Jidda va Madina)
 SAUDI_DESTINATIONS: list[str] = ["JED", "MED"]
 
+# ==================== AVTO-POST SANA OYNASI (3–35 KUN) ====================
+# Kanalga faqat yaqin kunlardagi reyslar chiqadi: bugundan 3 kundan 35 kungacha.
+# Shu tufayli uzoq dekabr/yanvar sanalari postga tushmaydi.
+MIN_DAYS_AHEAD: int = 3
+MAX_DAYS_AHEAD: int = 35
+
+# Sanalarni o'zbekcha ko'rsatish uchun hafta kunlari
+WEEKDAYS_UZ: list[str] = [
+    "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba",
+]
+
 # IATA kodlarining o'zbekcha nomlari (post va Mini App uchun)
 CITY_NAMES_UZ: dict[str, str] = {
     "TAS": "Toshkent",
@@ -113,6 +124,87 @@ def to_iata(city: str) -> str:
         return ""
     clean = city.strip().lower()
     return IATA.get(clean, city.strip().upper())
+
+
+# ==================== SANA YORDAMCHILARI (3–35 KUN OYNASI) ====================
+def parse_date(value) -> date | None:
+    """'2026-09-05', '2026-09-05T10:20:00+03:00' yoki date/datetime -> date."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()[:10]
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+def days_until(value, today: date | None = None) -> int | None:
+    """Bugundan berilgan sanagacha necha kun qolganini qaytaradi."""
+    parsed = parse_date(value)
+    if parsed is None:
+        return None
+    return (parsed - (today or date.today())).days
+
+
+def is_within_window(
+    value,
+    min_days: int = MIN_DAYS_AHEAD,
+    max_days: int = MAX_DAYS_AHEAD,
+    today: date | None = None,
+) -> bool:
+    """Sana yaqin 3–35 kun oynasiga tushadimi? (uzoq oylar chiqib ketmasligi uchun)"""
+    left = days_until(value, today=today)
+    if left is None:
+        return False
+    return min_days <= left <= max_days
+
+
+def filter_offers_by_window(
+    offers: list[dict],
+    min_days: int = MIN_DAYS_AHEAD,
+    max_days: int = MAX_DAYS_AHEAD,
+    today: date | None = None,
+) -> list[dict]:
+    """Faqat 3–35 kun ichidagi sanalarga ega takliflarni qoldiradi.
+
+    Sanasi yo'q yoki oynadan tashqaridagi (masalan uzoq dekabr/yanvar) takliflar
+    o'chirib tashlanadi. Har bir taklifga `days_left` va `depart_date_label`
+    maydonlari qo'shiladi.
+    """
+    base_day = today or date.today()
+    filtered: list[dict] = []
+    for offer in offers or []:
+        left = days_until(offer.get("depart_date"), today=base_day)
+        if left is None or left < min_days or left > max_days:
+            continue
+        enriched = dict(offer)
+        enriched["days_left"] = left
+        enriched["depart_date"] = parse_date(offer.get("depart_date")).isoformat()
+        enriched["depart_date_label"] = format_date_uz(enriched["depart_date"])
+        filtered.append(enriched)
+    return filtered
+
+
+def format_date_uz(value) -> str:
+    """'2026-09-05' -> '05.09.2026 (Juma)'."""
+    parsed = parse_date(value)
+    if parsed is None:
+        return str(value or "")
+    return f"{parsed.strftime('%d.%m.%Y')} ({WEEKDAYS_UZ[parsed.weekday()]})"
+
+
+def window_dates(
+    min_days: int = MIN_DAYS_AHEAD,
+    max_days: int = MAX_DAYS_AHEAD,
+    today: date | None = None,
+) -> list[str]:
+    """Oynadagi barcha sanalar ro'yxati (ISO formatda)."""
+    base_day = today or date.today()
+    return [(base_day + timedelta(days=i)).isoformat() for i in range(min_days, max_days + 1)]
 
 
 def _apply_markup(price):
@@ -217,15 +309,94 @@ async def _fetch_latest_for_route(client: httpx.AsyncClient, origin: str, destin
     return offers
 
 
+async def _fetch_window_for_route(
+    client: httpx.AsyncClient,
+    origin: str,
+    destination: str,
+    min_days: int = MIN_DAYS_AHEAD,
+    max_days: int = MAX_DAYS_AHEAD,
+    today: date | None = None,
+) -> list[dict]:
+    """Yaqin 3–35 kun oynasidagi haqiqiy sanalar bo'yicha narxlarni oladi.
+
+    Travelpayouts v3 `prices_for_dates` oyma-oy so'raladi (oyna 2 oyni qamrashi mumkin),
+    so'ng natijalar qat'iy ravishda oyna ichida filtrlanadi.
+    """
+    base_day = today or date.today()
+    allowed = set(window_dates(min_days, max_days, today=base_day))
+    months = sorted({d[:7] for d in allowed})
+
+    offers: list[dict] = []
+    for month in months:
+        params = {
+            "origin": origin,
+            "destination": destination,
+            "departure_at": month,
+            "sorting": "price",
+            "direct": "false",
+            "currency": "usd",
+            "limit": 100,
+            "one_way": "true",
+            "token": settings.TRAVELPAYOUTS_TOKEN,
+            "marker": settings.TRAVELPAYOUTS_MARKER,
+        }
+        try:
+            r = await client.get(PRICES_FOR_DATES_URL, params=params)
+            if r.status_code != 200:
+                continue
+            for item in r.json().get("data", []) or []:
+                raw_date = str(item.get("departure_at") or "")[:10]
+                if raw_date not in allowed:
+                    continue
+                price = _apply_markup(item.get("price"))
+                if price is None:
+                    continue
+                offers.append({
+                    "origin": origin,
+                    "destination": destination,
+                    "origin_name": city_name(origin),
+                    "destination_name": city_name(destination),
+                    "value": price,
+                    "depart_date": raw_date,
+                    "airline": item.get("airline") or "",
+                    "flight_number": item.get("flight_number") or "",
+                    "transfers": item.get("transfers", 0),
+                    "source": "api",
+                })
+        except Exception as e:
+            log.warning(f"{origin}->{destination} ({month}) oynadagi narxlarni olishda xatolik: {e}")
+            continue
+    return offers
+
+
+async def _fetch_route_offers(
+    client: httpx.AsyncClient,
+    origin: str,
+    destination: str,
+    min_days: int,
+    max_days: int,
+    today: date | None = None,
+) -> list[dict]:
+    """Avval aniq sanali (v3) narxlar, ular bo'lmasa — so'nggi narxlar (v2), ikkalasi ham oyna ichida."""
+    offers = await _fetch_window_for_route(client, origin, destination, min_days, max_days, today=today)
+    if offers:
+        return offers
+    latest = await _fetch_latest_for_route(client, origin, destination)
+    return filter_offers_by_window(latest, min_days, max_days, today=today)
+
+
 async def get_daily_cheapest(
     origin_city: str | None = None,
     origins: list[str] | None = None,
     destinations: list[str] | None = None,
+    min_days: int = MIN_DAYS_AHEAD,
+    max_days: int = MAX_DAYS_AHEAD,
 ) -> list[dict]:
     """Kunlik avto-post uchun narxlarni oladi.
 
     Sukut bo'yicha O'zbekistonning barcha 11 ta xalqaro aeroportidan
     Jidda (JED) va Madinaga (MED) narxlarni parallel ravishda yig'adi.
+    Natijada faqat yaqin `min_days`–`max_days` (3–35) kun ichidagi reyslar qoladi.
     """
     if origins:
         origin_codes = [to_iata(o) for o in origins if o]
@@ -235,18 +406,21 @@ async def get_daily_cheapest(
         origin_codes = list(UZ_AIRPORTS)
 
     dest_codes = [to_iata(d) for d in (destinations or SAUDI_DESTINATIONS) if d]
+    today = date.today()
 
     results: list[dict] = []
     async with httpx.AsyncClient(timeout=20) as client:
         tasks = [
-            _fetch_latest_for_route(client, origin, dest)
+            _fetch_route_offers(client, origin, dest, min_days, max_days, today=today)
             for origin in origin_codes
             for dest in dest_codes
         ]
         for chunk in await asyncio.gather(*tasks, return_exceptions=True):
             if isinstance(chunk, list):
                 results.extend(chunk)
-    return results
+
+    # Yakuniy qat'iy filtr: uzoq sanalar (dekabr, yanvar...) hech qanday holatda o'tmasin
+    return filter_offers_by_window(results, min_days, max_days, today=today)
 
 
 def _pseudo_price(origin: str, destination: str, day: str) -> int:
@@ -262,16 +436,26 @@ def _pseudo_price(origin: str, destination: str, day: str) -> int:
 def build_fallback_offers(
     origins: list[str] | None = None,
     destinations: list[str] | None = None,
-    days_ahead: int = 9,
+    min_days: int = MIN_DAYS_AHEAD,
+    max_days: int = MAX_DAYS_AHEAD,
+    today: date | None = None,
 ) -> list[dict]:
-    """Barcha 11 ta aeroportdan Jidda/Madinaga zaxira (taxminiy) narxlar ro'yxati."""
+    """Barcha 11 ta aeroportdan Jidda/Madinaga zaxira (taxminiy) narxlar ro'yxati.
+
+    Sanalar faqat yaqin 3–35 kun oynasidan tanlanadi — uzoq oylar (dekabr, yanvar)
+    hech qachon zaxira postga tushmaydi.
+    """
     origin_codes = origins or UZ_AIRPORTS
     dest_codes = destinations or SAUDI_DESTINATIONS
-    today = date.today()
+    base_day = today or date.today()
+    span = max(1, max_days - min_days + 1)
+
     offers: list[dict] = []
     for idx, origin in enumerate(origin_codes):
         for j, dest in enumerate(dest_codes):
-            day = (today + timedelta(days=((idx * 2 + j) % max(days_ahead, 1)) + 3)).isoformat()
+            # Sanalar oyna bo'ylab bir tekis taqsimlanadi (deterministik)
+            offset = min_days + ((idx * len(dest_codes) + j) * 3) % span
+            day = (base_day + timedelta(days=offset)).isoformat()
             offers.append({
                 "origin": origin,
                 "destination": dest,
@@ -279,9 +463,37 @@ def build_fallback_offers(
                 "destination_name": city_name(dest),
                 "value": _pseudo_price(origin, dest, day),
                 "depart_date": day,
+                "days_left": offset,
+                "depart_date_label": format_date_uz(day),
                 "source": "fallback",
             })
     return offers
+
+
+def top_up_missing_cities(
+    offers: list[dict],
+    origins: list[str] | None = None,
+    destinations: list[str] | None = None,
+    min_days: int = MIN_DAYS_AHEAD,
+    max_days: int = MAX_DAYS_AHEAD,
+    today: date | None = None,
+) -> list[dict]:
+    """API'dan tushmay qolgan shaharlarni zaxira (3–35 kunlik) takliflar bilan to'ldiradi.
+
+    Shu tufayli postda har doim O'zbekistonning 11 ta aeroporti ham qatnashadi.
+    """
+    origin_codes = origins or UZ_AIRPORTS
+    present = {str(o.get("origin") or "").upper() for o in (offers or [])}
+    missing = [o for o in origin_codes if o not in present]
+    if not missing:
+        return list(offers or [])
+    return list(offers or []) + build_fallback_offers(
+        origins=missing,
+        destinations=destinations,
+        min_days=min_days,
+        max_days=max_days,
+        today=today,
+    )
 
 
 def pick_mixed_offers(
