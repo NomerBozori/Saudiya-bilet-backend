@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     PAYMENT_CARD_OWNER: str = "F.I.Sh."
 
     # API'dan kelgan chiptalar narxiga qo'shiladigan avtomatik foyda ustamasi (%)
-    MARKUP_PERCENT: float = 10.0
+    # Render'da MARKUP_PERCENT o'zgaruvchisi orqali deploysiz o'zgartirish mumkin.
+    MARKUP_PERCENT: float = 2.5
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

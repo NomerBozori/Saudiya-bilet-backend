@@ -32,6 +32,17 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("saudiya-bilet")
 
+# Joriy build versiyasi — deploy yangilanganini tekshirish uchun (/api/version)
+APP_BUILD = "v12"
+APP_BUILD_FEATURES = [
+    "avto-post 3-35 kun",
+    "top-deals avto tavsiyalar",
+    "arzon narxlar taqvimi",
+    "boarding pass",
+    "3D karta + nusxalash",
+    "admin: o'chirish/tozalash/excel/CBU",
+]
+
 bot = Bot(token=settings.BOT_TOKEN)
 dp = Dispatcher()
 dp.include_router(bot_router)
@@ -784,7 +795,21 @@ async def admin_login(payload: dict):
 
 @app.get("/api/health")
 async def api_health():
-    return {"status": "ok", "service": "Saudiya Biletlar backend faol ishlayapti"}
+    return {
+        "status": "ok",
+        "service": "Saudiya Biletlar backend faol ishlayapti",
+        "build": APP_BUILD,
+    }
+
+
+@app.get("/api/version")
+async def api_version():
+    """Qaysi build jonli ishlayotganini tekshirish uchun (eski deployni aniqlash)."""
+    return {
+        "build": APP_BUILD,
+        "features": APP_BUILD_FEATURES,
+        "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
 
 
 @app.get("/api/payment-info")
