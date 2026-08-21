@@ -505,3 +505,55 @@ async def test_miniapp_has_deals_block_and_no_cache_headers():
     # Telegram eski dizaynni keshlab qolmasligi uchun
     for res in (html_res, js_res, css_res):
         assert "no-store" in res.headers.get("cache-control", "")
+
+
+# ==================== BUILD VERSIYASI ====================
+@pytest.mark.asyncio
+async def test_version_endpoint():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        res = await ac.get("/api/version")
+        health = await ac.get("/api/health")
+        html = (await ac.get("/")).text
+        js = (await ac.get("/app.js")).text
+    assert res.status_code == 200
+    assert res.json()["build"] == main.APP_BUILD
+    assert "top-deals avto tavsiyalar" in res.json()["features"]
+    assert health.json()["build"] == main.APP_BUILD
+    assert 'id="app-build"' in html
+    assert "showBuildInfo" in js
+
+
+# ==================== HALOL YORLIQLAR ====================
+@pytest.mark.asyncio
+async def test_no_fake_class_claims_in_miniapp():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        js = (await ac.get("/app.js")).text
+        html = (await ac.get("/")).text
+    banned = ["Premium Klass", "Saudia (VIP)", "Hamyonbop — Gold", "Bizning Reys — Premium"]
+    for phrase in banned:
+        assert phrase not in js, f"Soxta yorliq qolib ketgan: {phrase}"
+        assert phrase not in html, f"Soxta yorliq qolib ketgan: {phrase}"
+    assert "resultSeat" not in js and "resultGate" not in js
+    assert "Taxminiy narx — admin tasdiqlaydi" in js
+    assert "Jonli narx" in js
+    assert "results-note" in js
+    assert 'source:"estimate"' in js
+
+
+# ==================== FOYDA USTAMASI ====================
+def test_default_markup_is_2_5_percent():
+    from config import Settings
+    assert Settings.model_fields["MARKUP_PERCENT"].default == 2.5
+
+
+def test_markup_applied_to_api_prices():
+    old = tp.settings.MARKUP_PERCENT
+    try:
+        tp.settings.MARKUP_PERCENT = 2.5
+        assert tp._apply_markup(300) == 307.5
+        assert tp._apply_markup(380) == 389.5
+        assert tp._apply_markup(None) is None
+    finally:
+        tp.settings.MARKUP_PERCENT = old
