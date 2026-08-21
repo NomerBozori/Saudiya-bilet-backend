@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body class="tg-body">
 
@@ -86,6 +86,24 @@
             <div>
               <label class="tg-label">Yo'lovchilar soni</label>
               <input id="passengers" type="number" min="1" max="9" value="1" class="tg-input">
+            </div>
+          </div>
+
+          <!-- ARZON NARXLAR TAQVIMI (gorizontal) -->
+          <div class="pc-wrap" id="price-calendar-wrap">
+            <div class="pc-head">
+              <div>
+                <span class="pc-title">💸 Arzon Narxlar Taqvimi</span>
+                <span class="pc-sub" id="pc-route-label">TAS ➔ JED</span>
+              </div>
+              <button type="button" class="pc-refresh" id="pc-refresh" title="Taqvimni yangilash">🔄</button>
+            </div>
+            <div class="pc-strip" id="price-calendar">
+              <div class="pc-loading">⏳ Narxlar yuklanmoqda...</div>
+            </div>
+            <div class="pc-legend">
+              <span><i class="pc-dot cheap"></i> Eng arzon kun</span>
+              <span><i class="pc-dot sel"></i> Tanlangan sana</span>
             </div>
           </div>
 
@@ -204,7 +222,24 @@
               </div>
             </div>
           </div>
-          <p class="tg-hint" style="margin-top:8px;">Kartani barmoq bilan siljitib 3D ko‘rinishda ko‘ring. Raqamni bosib nusxa oling.</p>
+          <p class="tg-hint" style="margin-top:8px;">Kartani barmoq bilan siljitib 3D ko‘rinishda ko‘ring.</p>
+
+          <!-- KARTA RAQAMINI NUSXALASH -->
+          <div class="copy-row">
+            <div class="copy-field">
+              <span class="copy-label">KARTA RAQAMI</span>
+              <strong id="copy-card-number">8600 0000 0000 0000</strong>
+            </div>
+            <button type="button" class="copy-btn" id="btn-copy-card">📋 Nusxalash</button>
+          </div>
+          <div class="copy-row" style="margin-top:8px;">
+            <div class="copy-field">
+              <span class="copy-label">KARTA EGASI</span>
+              <strong id="copy-card-owner">SAUDIYA BILETLAR</strong>
+            </div>
+            <button type="button" class="copy-btn ghost" id="btn-copy-owner">📋 Nusxalash</button>
+          </div>
+          <p id="copy-toast" class="copy-toast hidden">✅ Karta raqami nusxalandi!</p>
 
           <label class="tg-label">To'lov cheki (Skrinshot)</label>
           <input id="payment_file" type="file" accept="image/*" class="tg-input">
@@ -347,6 +382,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

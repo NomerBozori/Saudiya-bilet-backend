@@ -1,20 +1,23 @@
 import io
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 
+import httpx
 from aiogram import Bot, Dispatcher
 from aiogram.types import BufferedInputFile, Update
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 import database as db
 import travelpayouts as tp
 from bot_handlers import router as bot_router
 from config import settings
+from keyboards import admin_order_keyboard
 from order_actions import confirm_order as confirm_order_action
 from order_actions import reject_order as reject_order_action
 
@@ -58,6 +61,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# /admin -> /admin/ avtomatik redirect (StaticFiles mountdan OLDIN e'lon qilinadi)
+@app.get("/admin", include_in_schema=False)
+async def admin_redirect():
+    return RedirectResponse(url="/admin/", status_code=307)
+
 
 app.mount("/admin", StaticFiles(directory="admin_static", html=True), name="admin")
 
@@ -162,11 +171,15 @@ async def api_create_order(payload: dict):
         f"✈️ {order.get('origin')} ➔ {order.get('destination')}\n"
         f"🗓 {order.get('depart_date')} | 👥 {order.get('passengers', 1)} yo'lovchi\n"
         f"💵 <b>${order.get('price', '-')} USD</b>\n\n"
-        f"To'lov cheki kelgach tasdiqlash uchun:\n"
-        f"<code>/confirm_order {order_id}</code>"
+        f"👇 Pastdagi tugmalar orqali 1 bosishda boshqaring:"
     )
     try:
-        await bot.send_message(settings.ADMIN_CHAT_ID, text, parse_mode="HTML")
+        await bot.send_message(
+            settings.ADMIN_CHAT_ID,
+            text,
+            parse_mode="HTML",
+            reply_markup=admin_order_keyboard(order_id),
+        )
     except Exception as e:
         log.warning(f"Admin guruhiga xabar yuborilmadi: {e}")
 
@@ -192,10 +205,12 @@ async def api_upload_payment(order_id: int, file: UploadFile = File(...)):
             photo,
             caption=(
                 f"💳 <b>To'lov cheki — buyurtma #{order_id}</b>\n\n"
-                f"Tasdiqlash: <code>/confirm_order {order_id}</code>\n"
-                f"Rad etish: <code>/reject_order {order_id} &lt;sabab&gt;</code>"
+                f"✈️ {(order.get('origin') or '').upper()} ➔ {(order.get('destination') or '').upper()}\n"
+                f"🗓 {order.get('depart_date') or '-'} | 💵 <b>${order.get('price', '-')}</b>\n\n"
+                f"👇 1 bosishda tasdiqlang yoki rad eting:"
             ),
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=admin_order_keyboard(order_id),
         )
     except Exception as e:
         log.warning(f"Admin guruhiga to'lov cheki yuborilmadi: {e}")
@@ -214,50 +229,183 @@ async def api_my_orders(telegram_user_id: int):
         return {"orders": []}
 
 
+# ==================== MARKAZIY BANK (CBU) JONLI KURSI ====================
+CBU_USD_URL = "https://cbu.uz/uz/arkhiv-kursov-valyut/json/USD/"
+_cbu_cache: dict = {"rate": None, "date": None, "diff": None, "ts": 0.0}
+CBU_CACHE_TTL = 30 * 60  # 30 daqiqa
+CBU_FALLBACK_RATE = 12850.0
+
+
+async def get_cbu_usd_rate() -> dict:
+    """Markaziy Bankdan (cbu.uz) USD/UZS jonli kursini oladi (30 daqiqa kesh)."""
+    now = time.time()
+    if _cbu_cache["rate"] and (now - _cbu_cache["ts"]) < CBU_CACHE_TTL:
+        return {
+            "rate": _cbu_cache["rate"],
+            "date": _cbu_cache["date"],
+            "diff": _cbu_cache["diff"],
+            "source": "cbu.uz (kesh)",
+        }
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(CBU_USD_URL)
+            r.raise_for_status()
+            data = r.json()
+            item = data[0] if isinstance(data, list) and data else data
+            rate = float(str(item.get("Rate")).replace(",", "."))
+            _cbu_cache.update({
+                "rate": rate,
+                "date": item.get("Date"),
+                "diff": item.get("Diff"),
+                "ts": now,
+            })
+            return {"rate": rate, "date": item.get("Date"), "diff": item.get("Diff"), "source": "cbu.uz"}
+    except Exception as e:
+        log.warning(f"CBU kursini olishda xatolik: {e}")
+        return {
+            "rate": _cbu_cache["rate"] or CBU_FALLBACK_RATE,
+            "date": _cbu_cache["date"],
+            "diff": _cbu_cache["diff"],
+            "source": "zaxira",
+        }
+
+
+@app.get("/api/cbu-rate")
+async def api_cbu_rate():
+    """Markaziy Bankning jonli USD kursi (Mini App va admin panel uchun)."""
+    return await get_cbu_usd_rate()
+
+
+# ==================== ARZON NARXLAR TAQVIMI ====================
+@app.get("/api/calendar")
+async def api_calendar(
+    origin: str = "TAS",
+    destination: str = "JED",
+    start_date: str | None = None,
+    days: int = 30,
+):
+    """Har bir kun bo'yicha eng arzon narxlar (gorizontal taqvim uchun)."""
+    origin_iata = tp.to_iata(origin)
+    dest_iata = tp.to_iata(destination)
+
+    try:
+        calendar = await tp.get_calendar_prices(origin_iata, dest_iata, start_date, days)
+    except Exception:
+        log.exception("Taqvim narxlarini olishda xatolik")
+        calendar = []
+
+    # Qo'lda qo'shilgan chiptalar taqvimdagi narxlardan arzon bo'lsa — ularni ustun qo'yamiz
+    try:
+        manual = db.list_manual_flights(origin_iata, dest_iata, None)
+    except Exception:
+        manual = []
+
+    manual_by_date: dict[str, float] = {}
+    for f in manual:
+        d = str(f.get("depart_date") or "")[:10]
+        try:
+            price = float(f.get("price"))
+        except (TypeError, ValueError):
+            continue
+        if d and (d not in manual_by_date or price < manual_by_date[d]):
+            manual_by_date[d] = price
+
+    for day in calendar:
+        m_price = manual_by_date.get(day["date"])
+        if m_price is not None and (day.get("price") is None or m_price < float(day["price"])):
+            day["price"] = m_price
+            day["source"] = "manual"
+            day["airline"] = "Saudiya Biletlar"
+
+    prices = [float(d["price"]) for d in calendar if d.get("price") is not None]
+    cheapest_price = min(prices) if prices else None
+    cheapest_date = None
+    if cheapest_price is not None:
+        for d in calendar:
+            if d.get("price") is not None and float(d["price"]) == cheapest_price:
+                cheapest_date = d["date"]
+                break
+        for d in calendar:
+            d["is_cheapest"] = d.get("date") == cheapest_date
+
+    return {
+        "origin": origin_iata,
+        "destination": dest_iata,
+        "origin_name": tp.city_name(origin_iata),
+        "destination_name": tp.city_name(dest_iata),
+        "cheapest_price": cheapest_price,
+        "cheapest_date": cheapest_date,
+        "days": calendar,
+    }
+
+
 # ==================== KANALGA CHIROYLI AVTO-POST ====================
 @app.post("/api/cron/daily-post")
 @app.get("/api/cron/daily-post")
-async def api_daily_post(secret: str = ""):
+async def api_daily_post(secret: str = "", limit: int = 11):
+    """O'zbekistonning 11 ta xalqaro aeroportidan Jidda va Madinaga aralash reyslar posti."""
     if secret != settings.CRON_SECRET:
         raise HTTPException(status_code=403, detail="Ruxsat yo'q")
 
-    tickets = await tp.get_daily_cheapest()
-    if not tickets:
-        return {"posted": 0}
+    try:
+        tickets = await tp.get_daily_cheapest()
+    except Exception:
+        log.exception("Kunlik narxlarni olishda xatolik")
+        tickets = []
 
-    valid_tickets = [t for t in tickets if t.get("value") is not None]
+    valid_tickets = [t for t in (tickets or []) if t.get("value") is not None]
+
+    used_fallback = False
     if not valid_tickets:
+        # API javob bermasa ham kanal bo'sh qolmasin — taxminiy narxlar bilan post ketadi
+        valid_tickets = tp.build_fallback_offers()
+        used_fallback = True
+
+    # Turfa xil aralash reyslar: bitta shahar (aeroport) takrorlanmaydi
+    selected = tp.pick_mixed_offers(valid_tickets, limit=max(1, min(int(limit or 11), 11)))
+    if not selected:
         return {"posted": 0}
 
-    cheapest = sorted(valid_tickets, key=lambda x: float(x.get("value") or 999999))[:4]
-    
-    UZS_RATE = 12850  # Taxminiy so'm kursi
+    rate_info = await get_cbu_usd_rate()
+    uzs_rate = float(rate_info.get("rate") or CBU_FALLBACK_RATE)
 
+    today_str = datetime.now().strftime("%d.%m.%Y")
     text = (
-        "🕋 <b>SAUDIYA BILETLAR | BUGUNGI ENG ARZON REYSLAR</b> ✈️\n\n"
-        "Jidda va Madinaga eng hamyonbop aviachiptalar narxlari:\n\n"
+        "🕋 <b>SAUDIYA BILETLAR | BUGUNGI ENG ARZON REYSLAR</b> ✈️\n"
+        f"📆 <i>{today_str}</i> — O'zbekistonning barcha aeroportlaridan Jidda va Madinaga:\n\n"
     )
-    
-    for t in cheapest:
-        val = int(t.get("value") or 380)
-        val_uzs = f"{val * UZS_RATE:,}".replace(",", " ")
+
+    for t in selected:
+        origin = str(t.get("origin") or "").upper()
+        dest = str(t.get("destination") or "").upper()
+        val = int(float(t.get("value") or 380))
+        val_uzs = f"{int(val * uzs_rate):,}".replace(",", " ")
+        origin_name = t.get("origin_name") or tp.city_name(origin)
+        dest_name = t.get("destination_name") or tp.city_name(dest)
+        dest_icon = "🕋" if dest == "MED" else "🌅"
         text += (
-            f"🔹 <b>{t['origin']} ➔ {t['destination']}</b>\n"
-            f"   📅 Sana: <code>{t.get('depart_date', 'Yaqin kunlar')}</code>\n"
+            f"{dest_icon} <b>{origin_name} ({origin}) ➔ {dest_name} ({dest})</b>\n"
+            f"   📅 Sana: <code>{t.get('depart_date') or 'Yaqin kunlar'}</code>\n"
             f"   💵 Narxi: <b>${val}</b> (~{val_uzs} so'm)\n"
             f"   🧳 Bagaj: 30 kg + 7 kg | 🍽 Issiq taom bepul\n"
             f"   ──────────────\n"
         )
 
     text += (
-        "\n⚡️ <i>Joylar soni cheklangan! Chipta band qilish uchun botga kiring:</i>\n"
+        f"\n💱 Markaziy Bank kursi: <b>1$ = {int(uzs_rate):,}</b> so'm\n".replace(",", " ")
+        + "⚡️ <i>Joylar soni cheklangan! Chipta band qilish uchun botga kiring:</i>\n"
         "👉 @Saudiya_Biletlarbot\n"
         f"👤 Savollar uchun: @{settings.ADMIN_USERNAME}"
     )
 
     try:
         await bot.send_message(settings.CHANNEL_ID, text, parse_mode="HTML")
-        return {"posted": len(cheapest)}
+        return {
+            "posted": len(selected),
+            "fallback": used_fallback,
+            "cities": [str(t.get("origin") or "").upper() for t in selected],
+        }
     except Exception as e:
         log.exception("Kanalga post yuborishda xatolik")
         raise HTTPException(status_code=500, detail=f"Kanalga xabar yuborishda xatolik: {e}")
@@ -270,9 +418,9 @@ async def admin_list_orders(status: str | None = None):
     return {"orders": orders}
 
 
-def _generate_excel_bytes(orders: list[dict]) -> bytes:
-    """Admin uchun buyurtmalarni Excel fayl sifatida generatsiya qiladi."""
-    if HAS_OPENPYXL:
+def _generate_excel_bytes(orders: list[dict], as_csv: bool = False) -> bytes:
+    """Admin uchun buyurtmalarni Excel (xlsx) yoki CSV fayl sifatida generatsiya qiladi."""
+    if HAS_OPENPYXL and not as_csv:
         wb = Workbook()
         ws = wb.active
         ws.title = "Buyurtmalar"
@@ -406,21 +554,28 @@ def _generate_excel_bytes(orders: list[dict]) -> bytes:
 
 
 @app.get("/api/admin/orders/export", dependencies=[Depends(verify_admin)])
-async def admin_export_orders(status: str | None = None):
-    """Buyurtmalarni Excel (xlsx) formatida eksport qilish."""
+async def admin_export_orders(status: str | None = None, format: str = "csv"):
+    """Buyurtmalarni Excel (xlsx) yoki CSV formatida eksport qilish.
+
+    format=csv  -> Excel ochadigan CSV (UTF-8 BOM bilan)
+    format=xlsx -> chiroyli formatlangan Excel fayl (openpyxl bo'lsa)
+    """
     orders = db.get_orders_with_passport(status=status if status else None)
-    xlsx_bytes = _generate_excel_bytes(orders)
 
-    filename = f"buyurtmalar_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
-    if not HAS_OPENPYXL:
-        filename = filename.replace(".xlsx", ".csv")
+    fmt = (format or "csv").strip().lower()
+    as_csv = fmt == "csv" or not HAS_OPENPYXL
+    data_bytes = _generate_excel_bytes(orders, as_csv=as_csv)
 
-    media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    if not HAS_OPENPYXL:
-        media_type = "text/csv; charset=utf-8"
+    ext = "csv" if as_csv else "xlsx"
+    filename = f"buyurtmalar_{datetime.now().strftime('%Y-%m-%d')}.{ext}"
+    media_type = (
+        "text/csv; charset=utf-8"
+        if as_csv
+        else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
     return StreamingResponse(
-        io.BytesIO(xlsx_bytes),
+        io.BytesIO(data_bytes),
         media_type=media_type,
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
@@ -441,6 +596,18 @@ async def admin_reject_order(order_id: int, payload: dict):
     if not result["ok"]:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
+
+
+@app.delete("/api/admin/orders/rejected", dependencies=[Depends(verify_admin)])
+@app.post("/api/admin/orders/clear-rejected", dependencies=[Depends(verify_admin)])
+async def admin_clear_rejected_orders():
+    """[🗑 Rad etilganlarni tozalash] — barcha rad etilgan buyurtmalarni o'chiradi."""
+    try:
+        deleted = db.delete_orders_by_status("rejected")
+        return {"ok": True, "deleted": deleted}
+    except Exception as e:
+        log.exception("Rad etilgan buyurtmalarni tozalashda xatolik")
+        raise HTTPException(status_code=500, detail=f"Tozalashda xatolik: {e}")
 
 
 @app.delete("/api/admin/orders/{order_id}", dependencies=[Depends(verify_admin)])

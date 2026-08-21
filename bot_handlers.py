@@ -12,10 +12,20 @@ from aiogram.types import (
 
 import database as db
 from config import settings
+from keyboards import (
+    CB_CANCEL,
+    CB_CONFIRM_PREFIX,
+    CB_REJECT_CONFIRM_PREFIX,
+    CB_REJECT_PREFIX,
+    admin_order_keyboard,
+    admin_reject_confirm_keyboard,
+)
 from order_actions import confirm_order, reject_order
 
 log = logging.getLogger("bot_handlers")
 router = Router()
+
+DEFAULT_REJECT_REASON = "To'lov cheki tasdiqlanmadi"
 
 
 # ==================== ASOSIY MENYU ====================
@@ -241,3 +251,136 @@ async def cmd_reject_order(message: Message, command: CommandObject, bot: Bot):
         await message.answer(f"❌ Buyurtma #{order_id} rad etildi va mijozga xabar yuborildi.")
     else:
         await message.answer(f"❌ Xatolik: {result['error']}")
+
+
+# ==================== ADMIN 1-CLICK INLINE TUGMALARI ====================
+
+def is_admin_callback(call: CallbackQuery) -> bool:
+    """Tugmani faqat admin (yoki admin guruhi a'zosi) bosishi mumkin."""
+    user_id = call.from_user.id if call.from_user else 0
+    chat_id = call.message.chat.id if call.message else 0
+    return chat_id == settings.ADMIN_CHAT_ID or user_id == settings.ADMIN_CHAT_ID
+
+
+def _parse_order_id(data: str) -> int | None:
+    try:
+        return int((data or "").split(":", 1)[1])
+    except (IndexError, ValueError):
+        return None
+
+
+async def _finish_admin_message(call: CallbackQuery, status_line: str, keep_keyboard: bool = False) -> None:
+    """Xabar tagiga natijani yozib, tugmalarni olib tashlaydi."""
+    message = call.message
+    if not message:
+        return
+    markup = message.reply_markup if keep_keyboard else None
+    try:
+        if message.caption is not None:
+            await message.edit_caption(
+                caption=f"{message.caption}\n\n{status_line}",
+                parse_mode="HTML",
+                reply_markup=markup,
+            )
+        elif message.text is not None:
+            await message.edit_text(
+                f"{message.text}\n\n{status_line}",
+                parse_mode="HTML",
+                reply_markup=markup,
+            )
+        else:
+            await message.edit_reply_markup(reply_markup=markup)
+    except Exception as e:
+        log.debug(f"Admin xabarini yangilashda xatolik: {e}")
+        try:
+            await message.answer(status_line, parse_mode="HTML")
+        except Exception:
+            pass
+
+
+@router.callback_query(F.data.startswith(f"{CB_CONFIRM_PREFIX}:"))
+async def cb_admin_confirm(call: CallbackQuery, bot: Bot):
+    """[✅ Tasdiqlash & PDF] — buyurtmani tasdiqlab, mijozga PDF chipta yuboradi."""
+    if not is_admin_callback(call):
+        await call.answer("Bu tugma faqat admin uchun.", show_alert=True)
+        return
+
+    order_id = _parse_order_id(call.data)
+    if order_id is None:
+        await call.answer("Buyurtma raqami noto'g'ri.", show_alert=True)
+        return
+
+    await call.answer("⏳ PDF chipta tayyorlanmoqda...")
+    result = await confirm_order(bot, order_id)
+    if result.get("ok"):
+        await _finish_admin_message(call, f"✅ <b>Buyurtma #{order_id} tasdiqlandi.</b> PDF chipta mijozga yuborildi.")
+    else:
+        await _finish_admin_message(
+            call,
+            f"⚠️ Tasdiqlashda xatolik: {result.get('error')}",
+            keep_keyboard=True,
+        )
+
+
+@router.callback_query(F.data.startswith(f"{CB_REJECT_PREFIX}:"))
+async def cb_admin_reject(call: CallbackQuery):
+    """[❌ Rad etish] — tasdiqlash so'raladi (tasodifan bosilib ketmasligi uchun)."""
+    if not is_admin_callback(call):
+        await call.answer("Bu tugma faqat admin uchun.", show_alert=True)
+        return
+
+    order_id = _parse_order_id(call.data)
+    if order_id is None:
+        await call.answer("Buyurtma raqami noto'g'ri.", show_alert=True)
+        return
+
+    try:
+        if call.message:
+            await call.message.edit_reply_markup(reply_markup=admin_reject_confirm_keyboard(order_id))
+    except Exception as e:
+        log.debug(f"Rad etish tugmalarini ko'rsatishda xatolik: {e}")
+    await call.answer("Rad etishni tasdiqlang")
+
+
+@router.callback_query(F.data.startswith(f"{CB_REJECT_CONFIRM_PREFIX}:"))
+async def cb_admin_reject_confirm(call: CallbackQuery, bot: Bot):
+    """[🚫 Ha, rad etilsin] — buyurtmani rad etib, mijozga xabar yuboradi."""
+    if not is_admin_callback(call):
+        await call.answer("Bu tugma faqat admin uchun.", show_alert=True)
+        return
+
+    order_id = _parse_order_id(call.data)
+    if order_id is None:
+        await call.answer("Buyurtma raqami noto'g'ri.", show_alert=True)
+        return
+
+    await call.answer("⏳ Rad etilmoqda...")
+    result = await reject_order(bot, order_id, DEFAULT_REJECT_REASON)
+    if result.get("ok"):
+        await _finish_admin_message(
+            call,
+            f"❌ <b>Buyurtma #{order_id} rad etildi.</b>\nSabab: {DEFAULT_REJECT_REASON}\n"
+            f"Boshqa sabab yozish uchun: <code>/reject_order {order_id} &lt;sabab&gt;</code>",
+        )
+    else:
+        await _finish_admin_message(
+            call,
+            f"⚠️ Rad etishda xatolik: {result.get('error')}",
+            keep_keyboard=True,
+        )
+
+
+@router.callback_query(F.data.startswith(f"{CB_CANCEL}:"))
+async def cb_admin_cancel(call: CallbackQuery):
+    """[↩️ Bekor qilish] — asosiy tugmalarni qaytaradi."""
+    if not is_admin_callback(call):
+        await call.answer("Bu tugma faqat admin uchun.", show_alert=True)
+        return
+
+    order_id = _parse_order_id(call.data)
+    try:
+        if call.message and order_id is not None:
+            await call.message.edit_reply_markup(reply_markup=admin_order_keyboard(order_id))
+    except Exception as e:
+        log.debug(f"Tugmalarni qaytarishda xatolik: {e}")
+    await call.answer("Bekor qilindi")
