@@ -1,5 +1,6 @@
 const API_BASE = "";
 let cachedOrders = [];
+let cbuRate = 12850;
 let pendingDelete = { type: null, id: null };
 
 // ==================== AVTOMATIK TAKLIF (SHAHARLAR) ====================
@@ -203,6 +204,11 @@ function updateDashboardStats(orders) {
   if (statPending) statPending.innerText = pending;
   if (statConfirmed) statConfirmed.innerText = confirmed;
   if (statRevenue) statRevenue.innerText = `$${revenue.toLocaleString()}`;
+  const statRevenueUzs = document.getElementById("stat-revenue-uzs");
+  if (statRevenueUzs) {
+    const uzs = Math.round(revenue * cbuRate);
+    statRevenueUzs.innerText = `${uzs.toLocaleString("uz-UZ").replace(/,/g, " ")} so'm`;
+  }
 }
 
 function filterOrdersLocally() {
@@ -380,43 +386,52 @@ if (refreshOrdersBtn) refreshOrdersBtn.addEventListener("click", loadOrders);
 const statusFilterEl = document.getElementById("status-filter");
 if (statusFilterEl) statusFilterEl.addEventListener("change", loadOrders);
 
-// ==================== EXCEL EKSPORT - YANGI FUNKSIYA ====================
+// ==================== EXCEL (CSV) / XLSX EKSPORT ====================
+async function exportOrders(format, btn, defaultLabel) {
+  const statusFilter = document.getElementById("status-filter");
+  const status = statusFilter ? statusFilter.value : "";
+  const params = new URLSearchParams({ format });
+  if (status) params.set("status", status);
+
+  if (btn) { btn.innerText = "⏳ Yuklanmoqda..."; btn.disabled = true; }
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/orders/export?${params.toString()}`, {
+      headers: { "X-Admin-Password": getPassword() }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Xatolik" }));
+      throw new Error(err.detail || "Export xatosi");
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const disposition = res.headers.get("Content-Disposition") || "";
+    let filename = `buyurtmalar_${new Date().toISOString().slice(0, 10)}.${format}`;
+    const match = disposition.match(/filename=([^;]+)/);
+    if (match) filename = match[1].replace(/"/g, "").trim();
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (e) {
+    alert("Eksport xatosi: " + e.message);
+  } finally {
+    if (btn) { btn.innerText = defaultLabel; btn.disabled = false; }
+  }
+}
+
 const exportExcelBtn = document.getElementById("export-excel-btn");
 if (exportExcelBtn) {
-  exportExcelBtn.addEventListener("click", async () => {
-    const statusFilter = document.getElementById("status-filter");
-    const status = statusFilter ? statusFilter.value : "";
-    const qs = status ? `?status=${status}` : "";
-    exportExcelBtn.innerText = "⏳ Yuklanmoqda...";
-    exportExcelBtn.disabled = true;
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/orders/export${qs}`, {
-        headers: { "X-Admin-Password": getPassword() }
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(()=>({detail:"Xatolik"}));
-        throw new Error(err.detail || "Export xatosi");
-      }
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const disposition = res.headers.get("Content-Disposition") || "";
-      let filename = `buyurtmalar_${new Date().toISOString().slice(0,10)}.xlsx`;
-      const match = disposition.match(/filename=([^;]+)/);
-      if (match) filename = match[1].replace(/"/g,"");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (e) {
-      alert("Excel eksport xatosi: " + e.message);
-    } finally {
-      exportExcelBtn.innerText = "📊 Excel Yuklash";
-      exportExcelBtn.disabled = false;
-    }
-  });
+  exportExcelBtn.addEventListener("click", () =>
+    exportOrders("csv", exportExcelBtn, "📊 Excel (CSV) Yuklab Olish"));
+}
+
+const exportXlsxBtn = document.getElementById("export-xlsx-btn");
+if (exportXlsxBtn) {
+  exportXlsxBtn.addEventListener("click", () =>
+    exportOrders("xlsx", exportXlsxBtn, "📗 XLSX"));
 }
 
 // ==================== QO'LDA CHIPTA QO'SHISH VA RO'YXAT ====================
@@ -540,3 +555,59 @@ function closeImgModal() {
 document.addEventListener("keydown", (e)=>{
   if(e.key==="Escape"){ closeImgModal(); closeDeleteModal(); }
 });
+
+// ==================== MARKAZIY BANK (CBU) JONLI KURSI ====================
+async function loadCbuRate() {
+  const valueEl = document.getElementById("cbu-rate-value");
+  const dateEl = document.getElementById("cbu-rate-date");
+  try {
+    const res = await fetch(`${API_BASE}/api/cbu-rate`);
+    if (!res.ok) throw new Error("Kurs olinmadi");
+    const data = await res.json();
+    const rate = parseFloat(data.rate);
+    if (rate && !isNaN(rate)) {
+      cbuRate = rate;
+      if (valueEl) valueEl.innerText = `1$ = ${Math.round(rate).toLocaleString("uz-UZ").replace(/,/g, " ")} so'm`;
+      if (dateEl) {
+        const diff = parseFloat(data.diff);
+        const diffTxt = !isNaN(diff) && diff !== 0
+          ? (diff > 0 ? ` ▲ +${diff}` : ` ▼ ${diff}`)
+          : "";
+        dateEl.innerText = `${data.date || ""}${diffTxt}`;
+        dateEl.className = "a-rate-date" + (!isNaN(diff) ? (diff > 0 ? " up" : (diff < 0 ? " down" : "")) : "");
+      }
+      if (cachedOrders.length) updateDashboardStats(cachedOrders);
+    }
+  } catch (e) {
+    if (valueEl) valueEl.innerText = "Kurs mavjud emas";
+    console.warn("CBU kursini olishda xato:", e);
+  }
+}
+loadCbuRate();
+setInterval(loadCbuRate, 30 * 60 * 1000); // har 30 daqiqada yangilanadi
+
+// ==================== RAD ETILGANLARNI TOZALASH ====================
+const clearRejectedBtn = document.getElementById("clear-rejected-btn");
+if (clearRejectedBtn) {
+  clearRejectedBtn.addEventListener("click", async () => {
+    const rejectedCount = cachedOrders.filter(o => o.status === "rejected").length;
+    const question = rejectedCount
+      ? `Rad etilgan ${rejectedCount} ta buyurtma butunlay o'chiriladi. Davom etamizmi?`
+      : "Barcha rad etilgan buyurtmalar o'chiriladi. Davom etamizmi?";
+    if (!confirm(question)) return;
+
+    const oldText = clearRejectedBtn.innerText;
+    clearRejectedBtn.innerText = "⏳ Tozalanmoqda...";
+    clearRejectedBtn.disabled = true;
+    try {
+      const data = await apiFetch("/api/admin/orders/clear-rejected", { method: "POST" });
+      alert(`🗑 ${data.deleted || 0} ta rad etilgan buyurtma o'chirildi.`);
+      loadOrders();
+    } catch (e) {
+      alert("Tozalashda xatolik: " + e.message);
+    } finally {
+      clearRejectedBtn.innerText = oldText;
+      clearRejectedBtn.disabled = false;
+    }
+  });
+}

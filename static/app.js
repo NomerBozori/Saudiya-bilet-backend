@@ -1,11 +1,14 @@
-// ==================== SOZLAMALAR — v10 Premium Dizayn ====================
+// ==================== SOZLAMALAR — v11 Premium Dizayn ====================
 const API_BASE_URL = "";
 const ADMIN_TG_USERNAME = "nuriddinovdfg";
-const UZS_RATE = 12850;
-const APP_VERSION = "v10 — Premium Gold Edition";
+let UZS_RATE = 12850; // Markaziy Bank (CBU) kursi bilan avtomatik yangilanadi
+const APP_VERSION = "v11 — Premium Gold Edition";
 
 let currentCurrency = "USD";
 let lastFlightResults = [];
+let lastCalendarDays = [];
+let calendarCheapestDate = null;
+let calendarLoading = false;
 
 const tg = window.Telegram?.WebApp || {
   ready: () => {}, expand: () => {}, showAlert: (msg) => alert(msg),
@@ -33,6 +36,7 @@ document.querySelectorAll(".tg-curr-btn").forEach(btn => {
     btn.classList.add("active");
     currentCurrency = btn.dataset.curr;
     if (lastFlightResults.length) renderResults(lastFlightResults);
+    if (lastCalendarDays.length) renderPriceCalendar(lastCalendarDays);
   });
 });
 
@@ -44,6 +48,25 @@ function formatPrice(usdPrice) {
   }
   return `$${price}`;
 }
+
+// ==================== MARKAZIY BANK (CBU) JONLI KURSI ====================
+async function loadCbuRate(){
+  try{
+    const res = await fetch(`${API_BASE_URL}/api/cbu-rate`);
+    if(!res.ok) return;
+    const data = await res.json();
+    const rate = parseFloat(data.rate);
+    if(!rate || isNaN(rate)) return;
+    UZS_RATE = rate;
+    const calcRate = document.getElementById("calc_rate");
+    if(calcRate && !calcRate.dataset.touched) calcRate.value = Math.round(rate);
+    if(typeof calculateCustomFare === "function") calculateCustomFare();
+    if(lastFlightResults.length) renderResults(lastFlightResults);
+    if(lastCalendarDays.length) renderPriceCalendar(lastCalendarDays);
+  }catch(e){ console.warn("CBU kursini olishda xatolik:", e); }
+}
+loadCbuRate();
+document.getElementById("calc_rate")?.addEventListener("input", (e)=>{ e.target.dataset.touched = "1"; });
 
 // ==================== KALKULYATOR ====================
 window.calculateCustomFare = function() {
@@ -87,6 +110,7 @@ window.setRoute = function(fromCode, fromName, toCode, toName) {
   if (destCodeEl) destCodeEl.value = toCode;
   // subtle animation
   if (originEl) { originEl.animate([{transform:'scale(1.02)'},{transform:'scale(1)'}], {duration:240}); }
+  window.schedulePriceCalendar?.(120);
 };
 
 function showScreen(id) {
@@ -133,6 +157,7 @@ async function fetchSuggestions(term, box, input, hidden) {
         input.value = `${item.name} (${item.code})`;
         hidden.value = item.code;
         box.classList.add("hidden");
+        window.schedulePriceCalendar?.(150);
       });
       box.appendChild(el);
     });
@@ -181,7 +206,7 @@ function createCalendar({dropdownId, triggerId, labelId, inputId, minDate, start
       <div class="tg-cal-grid">${daysHtml}</div>
     `;
     dropdown.querySelectorAll("[data-nav]").forEach(btn=>{ btn.addEventListener("click",(e)=>{ e.stopPropagation(); view.setMonth(view.getMonth()+Number(btn.dataset.nav)); render(); }); });
-    dropdown.querySelectorAll(".tg-cal-day[data-iso]").forEach(btn=>{ btn.addEventListener("click",(e)=>{ e.stopPropagation(); setValue(btn.dataset.iso); dropdown.classList.add("hidden"); trigger.classList.remove("open"); }); });
+    dropdown.querySelectorAll(".tg-cal-day[data-iso]").forEach(btn=>{ btn.addEventListener("click",(e)=>{ e.stopPropagation(); setValue(btn.dataset.iso); dropdown.classList.add("hidden"); trigger.classList.remove("open"); if(inputId==="depart_date") window.schedulePriceCalendar?.(120); }); });
   }
   trigger.addEventListener("click",(e)=>{
     e.stopPropagation();
@@ -201,6 +226,99 @@ createCalendar({dropdownId:"expiry_cal",triggerId:"expiry_cal_trigger",labelId:"
 const defaultOrigin=document.getElementById("origin"); if(defaultOrigin) defaultOrigin.value="Toshkent (TAS)";
 const defaultDest=document.getElementById("destination"); if(defaultDest) defaultDest.value="Jidda (JED)";
 
+// ==================== ARZON NARXLAR TAQVIMI (GORIZONTAL) ====================
+const UZ_WEEK_SHORT=["Yak","Du","Se","Chor","Pay","Jum","Sha"];
+const UZ_MONTHS_SHORT=["Yan","Fev","Mar","Apr","May","Iyn","Iyl","Avg","Sen","Okt","Noy","Dek"];
+
+function currentRouteCodes(){
+  const origin=(document.getElementById("origin_code")?.value||"TAS").toUpperCase();
+  const destination=(document.getElementById("destination_code")?.value||"JED").toUpperCase();
+  return { origin, destination };
+}
+
+function calendarPriceLabel(price){
+  const p=Number(price)||0;
+  if(currentCurrency==="UZS"){
+    const uzs=Math.round(p*UZS_RATE);
+    return `${Math.round(uzs/1000).toLocaleString("uz-UZ").replace(/,/g," ")}k`;
+  }
+  return `$${Math.round(p)}`;
+}
+
+function renderPriceCalendar(days){
+  const strip=document.getElementById("price-calendar");
+  if(!strip) return;
+  if(!days||!days.length){
+    strip.innerHTML=`<div class="pc-loading">Narxlar topilmadi</div>`;
+    return;
+  }
+  const selected=document.getElementById("depart_date")?.value||"";
+  strip.innerHTML="";
+  days.forEach(day=>{
+    const d=parseISODate(day.date);
+    if(!d) return;
+    const btn=document.createElement("button");
+    btn.type="button";
+    const isCheapest=day.is_cheapest || day.date===calendarCheapestDate;
+    btn.className=["pc-day", isCheapest?"cheap":"", day.date===selected?"selected":""].join(" ").trim();
+    btn.dataset.iso=day.date;
+    btn.innerHTML=`
+      <span class="pc-dow">${UZ_WEEK_SHORT[d.getDay()]}</span>
+      <span class="pc-date">${d.getDate()} ${UZ_MONTHS_SHORT[d.getMonth()]}</span>
+      <span class="pc-price">${calendarPriceLabel(day.price)}</span>
+      ${isCheapest?'<span class="pc-flag">eng arzon</span>':""}
+    `;
+    btn.addEventListener("click",()=>selectCalendarDay(day.date));
+    strip.appendChild(btn);
+  });
+  const activeEl=strip.querySelector(".pc-day.selected")||strip.querySelector(".pc-day.cheap");
+  if(activeEl) activeEl.scrollIntoView({behavior:"smooth", block:"nearest", inline:"center"});
+}
+
+function selectCalendarDay(iso){
+  const input=document.getElementById("depart_date");
+  const label=document.getElementById("depart_cal_label");
+  if(input) input.value=iso;
+  if(label) label.textContent=formatUzDate(iso);
+  state.departDate=iso;
+  document.querySelectorAll("#price-calendar .pc-day").forEach(el=>{
+    el.classList.toggle("selected", el.dataset.iso===iso);
+  });
+  if(tg.HapticFeedback?.selectionChanged) { try{ tg.HapticFeedback.selectionChanged(); }catch(e){} }
+}
+
+async function loadPriceCalendar(){
+  const strip=document.getElementById("price-calendar");
+  if(!strip||calendarLoading) return;
+  const { origin, destination }=currentRouteCodes();
+  const routeLabel=document.getElementById("pc-route-label");
+  if(routeLabel) routeLabel.textContent=`${origin} ➔ ${destination}`;
+  calendarLoading=true;
+  strip.innerHTML=`<div class="pc-loading">⏳ Har bir kun uchun eng arzon narxlar yuklanmoqda...</div>`;
+  try{
+    const startIso=document.getElementById("depart_date")?.value||isoDate(new Date());
+    const url=`${API_BASE_URL}/api/calendar?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&start_date=${encodeURIComponent(startIso)}&days=30`;
+    const res=await fetch(url);
+    if(!res.ok) throw new Error("Taqvim yuklanmadi");
+    const data=await res.json();
+    lastCalendarDays=data.days||[];
+    calendarCheapestDate=data.cheapest_date||null;
+    renderPriceCalendar(lastCalendarDays);
+  }catch(e){
+    console.warn("Taqvim xatosi:", e);
+    strip.innerHTML=`<div class="pc-loading">Narxlarni yuklab bo'lmadi. 🔄 tugmasi orqali qayta urinib ko'ring.</div>`;
+  }finally{ calendarLoading=false; }
+}
+
+let calendarTimer=null;
+window.schedulePriceCalendar=function(delay=350){
+  clearTimeout(calendarTimer);
+  calendarTimer=setTimeout(loadPriceCalendar, delay);
+};
+document.getElementById("pc-refresh")?.addEventListener("click",()=>loadPriceCalendar());
+schedulePriceCalendar(150);
+
+
 // ==================== 3D KARTA v10 ====================
 function init3DCard(){
   const scene=document.getElementById("card-3d-scene");
@@ -218,17 +336,77 @@ function init3DCard(){
   scene.addEventListener("mouseleave",reset);
   scene.addEventListener("touchend",reset);
   const numberEl=document.getElementById("card-number");
-  if(numberEl){
-    numberEl.addEventListener("click", async ()=>{
-      try{ await navigator.clipboard.writeText(numberEl.textContent.replace(/\s+/g,"")); tg.showAlert("✅ Karta raqami nusxalandi: "+numberEl.textContent); }
-      catch(e){ tg.showAlert(numberEl.textContent); }
-    });
+  const copyNumEl=document.getElementById("copy-card-number");
+  const copyOwnerEl=document.getElementById("copy-card-owner");
+  const toastEl=document.getElementById("copy-toast");
+
+  function showCopyToast(msg){
+    if(!toastEl){ tg.showAlert(msg); return; }
+    toastEl.textContent=`✅ ${msg}`;
+    toastEl.classList.remove("hidden");
+    toastEl.animate?.([{opacity:0, transform:'translateY(4px)'},{opacity:1, transform:'none'}],{duration:200});
+    clearTimeout(showCopyToast._t);
+    showCopyToast._t=setTimeout(()=>toastEl.classList.add("hidden"), 2600);
   }
+
+  async function copyToClipboard(text){
+    try{
+      if(navigator.clipboard?.writeText){ await navigator.clipboard.writeText(text); return true; }
+    }catch(e){ /* Telegram webview'da ruxsat bo'lmasligi mumkin */ }
+    try{
+      const ta=document.createElement("textarea");
+      ta.value=text;
+      ta.setAttribute("readonly","");
+      ta.style.position="fixed"; ta.style.top="-1000px"; ta.style.opacity="0";
+      document.body.appendChild(ta);
+      ta.select(); ta.setSelectionRange(0, ta.value.length);
+      const ok=document.execCommand("copy");
+      ta.remove();
+      return ok;
+    }catch(e){ return false; }
+  }
+
+  window.copyCardValue=async function(rawText, label, btn){
+    const text=(rawText||"").trim();
+    if(!text) return;
+    const ok=await copyToClipboard(text);
+    if(ok){
+      showCopyToast(`${label} nusxalandi: ${text}`);
+      if(tg.HapticFeedback?.notificationOccurred){ try{ tg.HapticFeedback.notificationOccurred("success"); }catch(e){} }
+      if(btn){
+        const old=btn.innerText;
+        btn.innerText="✅ Nusxalandi";
+        btn.classList.add("copied");
+        setTimeout(()=>{ btn.innerText=old; btn.classList.remove("copied"); }, 2000);
+      }
+    } else {
+      tg.showAlert(`${label}: ${text}`);
+    }
+  };
+
+  const btnCopyCard=document.getElementById("btn-copy-card");
+  if(btnCopyCard){
+    btnCopyCard.addEventListener("click",()=>copyCardValue((copyNumEl?.textContent||"").replace(/\s+/g,""), "Karta raqami", btnCopyCard));
+  }
+  const btnCopyOwner=document.getElementById("btn-copy-owner");
+  if(btnCopyOwner){
+    btnCopyOwner.addEventListener("click",()=>copyCardValue(copyOwnerEl?.textContent||"", "Karta egasi", btnCopyOwner));
+  }
+  if(numberEl){
+    numberEl.addEventListener("click", ()=>copyCardValue(numberEl.textContent.replace(/\s+/g,""), "Karta raqami", null));
+  }
+
   fetch(`${API_BASE_URL}/api/payment-info`).then(r=>r.ok?r.json():null).then(data=>{
     if(!data) return;
-    if(data.card_number && numberEl) numberEl.textContent=data.card_number;
+    if(data.card_number){
+      if(numberEl) numberEl.textContent=data.card_number;
+      if(copyNumEl) copyNumEl.textContent=data.card_number;
+    }
     const ownerEl=document.getElementById("card-owner");
-    if(data.card_owner && ownerEl) ownerEl.textContent=data.card_owner;
+    if(data.card_owner){
+      if(ownerEl) ownerEl.textContent=data.card_owner;
+      if(copyOwnerEl) copyOwnerEl.textContent=data.card_owner;
+    }
   }).catch(()=>{});
 }
 init3DCard();
@@ -330,6 +508,74 @@ if(btnSearch){
   });
 }
 
+function addMinutesToTime(hhmm, minutes){
+  const [h,m]=(hhmm||"09:30").split(":").map(Number);
+  const total=((isNaN(h)?9:h)*60+(isNaN(m)?30:m)+minutes)%1440;
+  return `${String(Math.floor(total/60)).padStart(2,"0")}:${String(total%60).padStart(2,"0")}`;
+}
+function durationToMinutes(text){
+  const m=String(text||"").match(/(\d+)\s*s(?:oat)?\s*(\d+)?/i);
+  if(!m) return 345;
+  return Number(m[1])*60 + Number(m[2]||0);
+}
+function resultSeat(idx){ return `${10+(idx%22)}${"ABCDEF"[idx%6]}`; }
+function resultGate(dest, idx){ const map={JED:"C12", MED:"B07", RUH:"A04"}; return map[(dest||"").toUpperCase()]||`D${String((idx%18)+1).padStart(2,"0")}`; }
+
+// ==================== NATIJALAR — BOARDING PASS DIZAYNI ====================
+function flightBoardingPassHTML(f, idx){
+  const origin=(f.origin||state.origin||"TAS").toUpperCase();
+  const dest=(f.destination||state.destination||"JED").toUpperCase();
+  const airlineName=f.airline||"Centrum Air / Saudia";
+  const flightNumber=f.flight_number||"SAU-"+(100+idx);
+  let depTime=f.departure_time||"09:30";
+  if(f.departure_at){ try{ const d=new Date(f.departure_at); depTime=`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; }catch(e){} }
+  const duration=f.duration||"5s 45d";
+  const arrTime=f.arrival_time||addMinutesToTime(depTime, durationToMinutes(duration));
+  const transfers=Number(f.transfers||0);
+  const transferText=transfers===0?"TO‘G‘RIDAN-TO‘G‘RI":`${transfers} TA TRANZIT`;
+  const tagText=f.tag||(transfers===0?"⭐ To'g'ridan-to'g'ri":"✈️ Qulay tranzit");
+  const baggageText=f.baggage||"30 kg + 7 kg";
+  const seatsText=f.seats_available?`${f.seats_available} ta joy`:"Joylar bor";
+  const seat=resultSeat(idx);
+  const gate=resultGate(dest, idx);
+  const price=formatPrice(f.price);
+  const date=state.departDate||"-";
+  return `
+    <article class="bp-ticket bp-result" data-idx="${idx}">
+      <div class="bp-main">
+        <div class="bp-kicker"><span>SAUDIYA BILETLAR ✦ BOARDING PASS</span><span>${airlineName} · ${flightNumber}</span></div>
+        <div class="bp-route">
+          <div><div class="bp-iata">${origin}</div><div class="bp-city">${CITY_NAMES[origin]||origin} · ${depTime}</div></div>
+          <div class="bp-plane">✈</div>
+          <div style="text-align:right;"><div class="bp-iata">${dest}</div><div class="bp-city">${CITY_NAMES[dest]||dest} · ${arrTime}</div></div>
+        </div>
+        <div class="bp-flightline"><span>${transferText}</span><span>⏱ ${duration}</span><span>🧳 ${baggageText}</span></div>
+        <div class="bp-grid">
+          <div class="bp-cell"><span>SANA</span><strong>${date}</strong></div>
+          <div class="bp-cell"><span>UCHISH</span><strong>${depTime}</strong></div>
+          <div class="bp-cell"><span>QO‘NISH</span><strong>${arrTime}</strong></div>
+          <div class="bp-cell"><span>REYS</span><strong>${flightNumber}</strong></div>
+          <div class="bp-cell"><span>DARVOZA</span><strong>${gate}</strong></div>
+          <div class="bp-cell"><span>O‘RINLAR</span><strong>${seatsText}</strong></div>
+        </div>
+        <div class="bp-price-row">
+          <div>
+            <span class="bp-price-label">1 yo'lovchi uchun</span>
+            <div class="bp-price">${price}</div>
+          </div>
+          <button type="button" class="bp-book-btn" data-book="${idx}">🎫 Band qilish</button>
+        </div>
+        <span class="bp-status">${tagText}</span>
+      </div>
+      <div class="bp-stub">
+        <div class="bp-stub-title">BOARDING</div>
+        <div><div class="bp-stub-seat">${seat}</div><div class="bp-stub-gate">GATE ${gate}</div></div>
+        <div class="bp-bars" aria-hidden="true"></div>
+      </div>
+    </article>
+  `;
+}
+
 function renderResults(flights){
   const list=document.getElementById("results-list");
   const empty=document.getElementById("results-empty");
@@ -345,42 +591,13 @@ function renderResults(flights){
   if(countBadge) countBadge.innerText=`${flights.length} ta premium reys topildi ✦`;
 
   flights.forEach((f,idx)=>{
-    const card=document.createElement("div");
-    card.className="tg-flight-card";
-    card.style.animationDelay=`${idx*55}ms`;
-    const airlineName=f.airline||"Centrum Air / Saudia";
-    const flightNumber=f.flight_number||"SAU-"+(100+idx);
-    let depTime=f.departure_time||"09:30";
-    let arrTime=f.arrival_time||"13:15";
-    let duration=f.duration||"5s 45d";
-    if(f.departure_at){ try{ const d=new Date(f.departure_at); depTime=d.toLocaleTimeString("uz-UZ",{hour:"2-digit",minute:"2-digit"}); }catch(e){} }
-    const tagText=f.tag||(f.transfers===0?"⭐ To'g'ridan-to'g'ri Reys":"✈️ Qulay Tranzit");
-    const tagClass=f.transfers===0?"tag-agency":"tag-hot";
-    const transferText=f.transfers===0?"To'g'ridan-to'g'ri (Direct)":`${f.transfers} ta tranzit`;
-    const seatsText=f.seats_available?`${f.seats_available} ta joy qoldi`:"Joylar mavjud";
-    const baggageText=f.baggage||"30 kg bagaj + 7 kg qo'l yuki";
-    const formattedPrice=formatPrice(f.price);
-    card.innerHTML=`
-      <span class="tg-badge-tag ${tagClass}">${tagText}</span>
-      <div class="tg-flight-header">
-        <div class="tg-flight-airline"><div><div class="tg-airline-name">✈️ ${airlineName}</div><span class="tg-flight-num">${flightNumber}</span></div></div>
-        <div class="tg-flight-price-box"><div class="tg-flight-price">${formattedPrice}</div><div class="tg-flight-price-label">1 kishi uchun • Premium</div></div>
-      </div>
-      <div class="tg-flight-route-box">
-        <div class="tg-route-point"><div class="tg-point-city">${state.origin}</div><div class="tg-point-time">${depTime}</div></div>
-        <div class="tg-route-middle"><div class="tg-route-duration">${duration}</div><div class="tg-route-line">───── ✈ ─────</div><div style="font-size:10px; color:#10B981; font-weight:700;">${transferText}</div></div>
-        <div class="tg-route-point right"><div class="tg-point-city">${state.destination}</div><div class="tg-point-time">${arrTime}</div></div>
-      </div>
-      <div class="tg-flight-details-grid">
-        <div class="tg-f-detail">🧳 Bagaj: <strong>${baggageText}</strong></div>
-        <div class="tg-f-detail">📅 Sana: <strong>${state.departDate}</strong></div>
-        <div class="tg-f-detail">💺 O'rinlar: <strong>${seatsText}</strong></div>
-        <div class="tg-f-detail">🍽 Ovqat: <strong>Issiq taom bepul</strong></div>
-      </div>
-      <button class="tg-btn-primary tg-flight-select" data-idx="${idx}">🎫 Chiptani Band Qilish (${formattedPrice}) — Gold</button>
-    `;
-    list.appendChild(card);
-    card.querySelector(".tg-flight-select").addEventListener("click", ()=>selectFlight(f));
+    const wrap=document.createElement("div");
+    wrap.className="bp-result-wrap";
+    wrap.style.animationDelay=`${idx*55}ms`;
+    wrap.innerHTML=flightBoardingPassHTML(f, idx);
+    list.appendChild(wrap);
+    wrap.querySelector("[data-book]")?.addEventListener("click",(e)=>{ e.stopPropagation(); selectFlight(f); });
+    wrap.querySelector(".bp-ticket")?.addEventListener("click",()=>openBoardingPass(flightBoardingPassHTML(f, idx)));
   });
 }
 

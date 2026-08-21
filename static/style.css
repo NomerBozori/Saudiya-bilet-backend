@@ -998,3 +998,241 @@ body.tg-body {
 ::-webkit-scrollbar-thumb { background: rgba(15,33,71,0.18); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(15,33,71,0.28); }
 
+
+/* ==================== v11: ARZON NARXLAR TAQVIMI (GORIZONTAL) ==================== */
+.pc-wrap {
+  margin: 16px 0 4px;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(150deg, #0B1B3A 0%, #16325C 100%);
+  border: 1px solid rgba(212,175,55,0.22);
+  box-shadow: 0 10px 24px rgba(7,15,37,0.18);
+}
+.pc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.pc-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  color: #F3D77A;
+  letter-spacing: 0.2px;
+}
+.pc-sub {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #C9D4E5;
+  margin-top: 2px;
+  letter-spacing: 1px;
+}
+.pc-refresh {
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+.pc-refresh:hover { background: rgba(255,255,255,0.18); transform: rotate(45deg); }
+.pc-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.pc-strip::-webkit-scrollbar { height: 4px; }
+.pc-strip::-webkit-scrollbar-thumb { background: rgba(212,175,55,0.5); border-radius: 4px; }
+.pc-day {
+  flex: 0 0 auto;
+  min-width: 72px;
+  scroll-snap-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 9px 8px 8px;
+  border-radius: 14px;
+  border: 1.5px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+.pc-day:hover { transform: translateY(-2px); border-color: rgba(212,175,55,0.55); }
+.pc-dow { font-size: 9px; font-weight: 700; letter-spacing: 0.6px; color: #A9BAD3; text-transform: uppercase; }
+.pc-date { font-size: 12px; font-weight: 800; }
+.pc-price { font-size: 14px; font-weight: 800; color: #F3D77A; margin-top: 2px; }
+.pc-day.cheap {
+  background: linear-gradient(160deg, rgba(16,185,129,0.28), rgba(16,185,129,0.10));
+  border-color: rgba(16,185,129,0.75);
+}
+.pc-day.cheap .pc-price { color: #6EE7B7; }
+.pc-day.selected {
+  background: linear-gradient(160deg, #D4AF37, #F3D77A);
+  border-color: #FFF3C4;
+  color: #0B1B3A;
+  box-shadow: 0 8px 18px rgba(212,175,55,0.35);
+}
+.pc-day.selected .pc-dow { color: #4A3A05; }
+.pc-day.selected .pc-price { color: #0B1B3A; }
+.pc-flag {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  background: rgba(16,185,129,0.9);
+  color: #04241A;
+  border-radius: 6px;
+  padding: 1px 5px;
+  margin-top: 2px;
+}
+.pc-day.selected .pc-flag { background: #0B1B3A; color: #F3D77A; }
+.pc-loading {
+  font-size: 12px;
+  color: #C9D4E5;
+  padding: 14px 6px;
+}
+.pc-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #A9BAD3;
+  letter-spacing: 0.2px;
+}
+.pc-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+.pc-dot.cheap { background: #10B981; }
+.pc-dot.sel { background: #D4AF37; }
+
+/* ==================== v11: NATIJALARDAGI BOARDING PASS ==================== */
+.bp-result-wrap { animation: fadeInUp 0.34s ease both; }
+.bp-ticket.bp-result { cursor: pointer; }
+.bp-flightline {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #9FE8C8;
+  background: rgba(16,185,129,0.12);
+  border: 1px solid rgba(16,185,129,0.25);
+  border-radius: 10px;
+  padding: 5px 8px;
+  margin-bottom: 8px;
+}
+.bp-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(255,255,255,0.2);
+}
+.bp-price-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #A9BAD3;
+  text-transform: uppercase;
+}
+.bp-price {
+  font-size: 22px;
+  font-weight: 800;
+  color: #F3D77A;
+  line-height: 1.1;
+}
+.bp-book-btn {
+  border: none;
+  border-radius: 12px;
+  padding: 11px 16px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0B1B3A;
+  background: linear-gradient(135deg, #D4AF37, #F3D77A);
+  box-shadow: 0 8px 18px rgba(212,175,55,0.32);
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.bp-book-btn:hover { transform: translateY(-1px); box-shadow: 0 12px 22px rgba(212,175,55,0.42); }
+.bp-book-btn:active { transform: scale(0.97); }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ==================== v11: KARTA RAQAMINI NUSXALASH ==================== */
+.copy-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1.5px dashed rgba(212,175,55,0.55);
+  background: rgba(212,175,55,0.08);
+  margin-top: 12px;
+}
+.copy-field { flex: 1; min-width: 0; }
+.copy-label {
+  display: block;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: var(--tg-theme-hint-color, var(--text-muted));
+  margin-bottom: 2px;
+}
+.copy-field strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--tg-theme-text-color, var(--text-dark));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.copy-btn {
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #0B1B3A;
+  background: linear-gradient(135deg, #D4AF37, #F3D77A);
+  cursor: pointer;
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+.copy-btn.ghost {
+  background: transparent;
+  border: 1.5px solid rgba(212,175,55,0.7);
+  color: var(--accent-gold);
+}
+.copy-btn:active { transform: scale(0.96); }
+.copy-btn.copied { background: linear-gradient(135deg, #10B981, #6EE7B7); color: #04241A; }
+.copy-toast {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(16,185,129,0.14);
+  border: 1px solid rgba(16,185,129,0.4);
+  color: #0F766E;
+  font-size: 12px;
+  font-weight: 700;
+}
