@@ -433,3 +433,75 @@ async def test_export_csv_and_xlsx():
     assert xlsx_res.status_code == 200
     assert ".xlsx" in xlsx_res.headers["content-disposition"]
     assert xlsx_res.content[:2] == b"PK"
+
+
+# ==================== 9. AVTO NARX TAVSIYALARI (TOP DEALS) ====================
+@pytest.mark.asyncio
+async def test_top_deals_endpoint():
+    """Mini App ochilishida arzon takliflar avtomatik keladi (3–35 kun ichida)."""
+    main._deals_cache.update({"data": None, "ts": 0})
+    soon = (date.today() + timedelta(days=6)).isoformat()
+    far = (date.today() + timedelta(days=150)).isoformat()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        with patch("travelpayouts.get_daily_cheapest", new=AsyncMock(return_value=[
+                 {"origin": "TAS", "destination": "JED", "value": 289, "depart_date": soon},
+                 {"origin": "NMA", "destination": "MED", "value": 199, "depart_date": far},
+             ])), \
+             patch("main.get_cbu_usd_rate", new=AsyncMock(return_value={"rate": 12850.0})):
+            res = await ac.get("/api/top-deals?limit=5")
+
+    assert res.status_code == 200
+    data = res.json()
+    deals = data["deals"]
+    assert 1 <= len(deals) <= 5
+    assert data["window"] == {"min_days": 3, "max_days": 35}
+    # Eng arzoni birinchi va belgilangan
+    assert deals[0]["is_cheapest"] is True
+    assert deals[0]["price"] == min(d["price"] for d in deals)
+    # Uzoq sana (150 kun) taklifga tushmasligi kerak
+    assert all(d["depart_date"] != far for d in deals)
+    today = date.today()
+    for d in deals:
+        left = (date.fromisoformat(d["depart_date"]) - today).days
+        assert 3 <= left <= 35
+        assert d["origin_name"] and d["destination_name"]
+        assert d["depart_date_label"]
+
+
+@pytest.mark.asyncio
+async def test_top_deals_uses_cache():
+    """Narxlar 30 daqiqa keshlanadi — API har safar bezovta qilinmaydi."""
+    main._deals_cache.update({"data": None, "ts": 0})
+    soon = (date.today() + timedelta(days=5)).isoformat()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        with patch("travelpayouts.get_daily_cheapest", new=AsyncMock(return_value=[
+                 {"origin": "TAS", "destination": "JED", "value": 300, "depart_date": soon},
+             ])) as mock_api, \
+             patch("main.get_cbu_usd_rate", new=AsyncMock(return_value={"rate": 12850.0})):
+            await ac.get("/api/top-deals")
+            await ac.get("/api/top-deals")
+            assert mock_api.await_count == 1
+            await ac.get("/api/top-deals?refresh=true")
+            assert mock_api.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_miniapp_has_deals_block_and_no_cache_headers():
+    """Tavsiyalar bloki Mini Appda bor va statik fayllar keshlanmaydi."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        html_res = await ac.get("/")
+        js_res = await ac.get("/app.js")
+        css_res = await ac.get("/style.css")
+
+    html, js, css = html_res.text, js_res.text, css_res.text
+    assert 'id="deals-strip"' in html
+    assert "🔥 Bugungi Eng Arzon Takliflar" in html
+    assert "loadTopDeals" in js and "applyDeal" in js
+    assert ".deal-card" in css
+    # Telegram eski dizaynni keshlab qolmasligi uchun
+    for res in (html_res, js_res, css_res):
+        assert "no-store" in res.headers.get("cache-control", "")

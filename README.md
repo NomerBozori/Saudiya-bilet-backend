@@ -34,6 +34,23 @@ GET /api/calendar?origin=TAS&destination=JED&start_date=2026-09-01&days=30
 ```
 Qo'lda qo'shilgan (manual) chiptalar API narxidan arzon bo'lsa — taqvimda ular ustun turadi.
 
+### 3B. 🔥 Avto narx tavsiyalari — `GET /api/top-deals`
+Mini App ochilishi bilan **qidiruvdan oldin** eng arzon takliflar avtomatik ko'rsatiladi
+(11 ta aeroportdan, faqat 3–35 kun oynasida, eng arzoni 🏆 belgisi bilan).
+
+- Narxlar serverda 30 daqiqa keshlanadi, ilovada har 10 daqiqada avtomatik yangilanadi
+- Taklifni bosish → yo'nalish va sana avtomatik tanlanadi va qidiruv ishga tushadi
+- USD/So'm o'zgartirgichga bo'ysunadi
+
+```
+GET /api/top-deals?limit=8[&refresh=true]
+```
+
+### 3C. Keshni o'chirish (eski dizayn muammosi)
+Telegram Mini App statik fayllarni uzoq keshlaydi va foydalanuvchi eski dizaynni ko'rib qolardi.
+Endi `.html/.js/.css` uchun `Cache-Control: no-store` qaytariladi + asset versiyalari (`?v=12`)
+yangilandi — ilova har doim eng so'nggi versiyani yuklaydi.
+
 ### 4. Telegram admin 1-click inline tugmalari
 Yangi buyurtma va to'lov cheki xabari tagida: **[✅ Tasdiqlash & PDF]** va **[❌ Rad etish]**.
 
@@ -67,6 +84,7 @@ StaticFiles mountdan oldin e'lon qilingan `307` redirect — panel har doim ochi
 | `GET` | `/api/health` | Servis holati |
 | `GET` | `/api/search` | Chipta qidirish (manual + Travelpayouts) |
 | `GET` | `/api/calendar` | Arzon narxlar taqvimi |
+| `GET` | `/api/top-deals` | 🔥 Avto narx tavsiyalari (eng arzon takliflar) |
 | `GET` | `/api/cbu-rate` | Markaziy Bank USD kursi |
 | `POST` | `/api/orders` | Buyurtma yaratish (adminga inline tugmali xabar) |
 | `POST` | `/api/orders/{id}/payment` | To'lov chekini yuklash |

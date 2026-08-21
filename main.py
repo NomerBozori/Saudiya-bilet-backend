@@ -62,6 +62,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# Telegram Mini App statik fayllarni juda uzoq keshlaydi — natijada foydalanuvchi
+# eski dizaynni ko'rib qoladi. HTML/JS/CSS uchun keshni butunlay o'chiramiz.
+@app.middleware("http")
+async def no_cache_for_static(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path.lower()
+    if path.endswith((".html", ".js", ".css")) or path in ("/", "/admin/", "/admin"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 # /admin -> /admin/ avtomatik redirect (StaticFiles mountdan OLDIN e'lon qilinadi)
 @app.get("/admin", include_in_schema=False)
 async def admin_redirect():
@@ -275,6 +288,69 @@ async def get_cbu_usd_rate() -> dict:
 async def api_cbu_rate():
     """Markaziy Bankning jonli USD kursi (Mini App va admin panel uchun)."""
     return await get_cbu_usd_rate()
+
+
+# ==================== 🔥 AVTO NARX TAVSIYALARI (TOP DEALS) ====================
+_deals_cache: dict = {"data": None, "ts": 0.0}
+DEALS_CACHE_TTL = 30 * 60  # 30 daqiqa
+
+
+@app.get("/api/top-deals")
+async def api_top_deals(limit: int = 8, refresh: bool = False):
+    """Mini App ochilishida avtomatik ko'rsatiladigan eng arzon takliflar.
+
+    O'zbekistonning 11 ta aeroportidan Jidda/Madinaga, faqat yaqin 3–35 kun
+    ichidagi reyslar. Narxlar 30 daqiqa keshlanadi (avtomatik yangilanadi).
+    """
+    limit = max(1, min(int(limit or 8), 11))
+    now = time.time()
+
+    cached = _deals_cache.get("data")
+    if cached and not refresh and (now - float(_deals_cache.get("ts") or 0)) < DEALS_CACHE_TTL:
+        deals = cached
+    else:
+        try:
+            tickets = await tp.get_daily_cheapest()
+        except Exception:
+            log.exception("Top-deals narxlarini olishda xatolik")
+            tickets = []
+
+        valid = tp.filter_offers_by_window([t for t in (tickets or []) if t.get("value") is not None])
+        valid = tp.top_up_missing_cities(valid)
+        picked = tp.pick_mixed_offers(valid, limit=11)
+
+        deals = []
+        for t in picked:
+            try:
+                price = round(float(t.get("value")), 2)
+            except (TypeError, ValueError):
+                continue
+            origin = str(t.get("origin") or "").upper()
+            dest = str(t.get("destination") or "").upper()
+            deals.append({
+                "origin": origin,
+                "origin_name": t.get("origin_name") or tp.city_name(origin),
+                "destination": dest,
+                "destination_name": t.get("destination_name") or tp.city_name(dest),
+                "price": price,
+                "depart_date": t.get("depart_date"),
+                "depart_date_label": t.get("depart_date_label") or tp.format_date_uz(t.get("depart_date")),
+                "days_left": t.get("days_left"),
+                "source": t.get("source") or "api",
+            })
+
+        deals.sort(key=lambda d: d["price"])
+        for i, d in enumerate(deals):
+            d["is_cheapest"] = i == 0
+        _deals_cache.update({"data": deals, "ts": now})
+
+    rate_info = await get_cbu_usd_rate()
+    return {
+        "deals": deals[:limit],
+        "rate": rate_info.get("rate") or CBU_FALLBACK_RATE,
+        "window": {"min_days": tp.MIN_DAYS_AHEAD, "max_days": tp.MAX_DAYS_AHEAD},
+        "updated_at": datetime.now().strftime("%H:%M"),
+    }
 
 
 # ==================== ARZON NARXLAR TAQVIMI ====================

@@ -37,6 +37,7 @@ document.querySelectorAll(".tg-curr-btn").forEach(btn => {
     currentCurrency = btn.dataset.curr;
     if (lastFlightResults.length) renderResults(lastFlightResults);
     if (lastCalendarDays.length) renderPriceCalendar(lastCalendarDays);
+    if (typeof lastDeals !== "undefined" && lastDeals.length) renderDeals(lastDeals);
   });
 });
 
@@ -63,6 +64,7 @@ async function loadCbuRate(){
     if(typeof calculateCustomFare === "function") calculateCustomFare();
     if(lastFlightResults.length) renderResults(lastFlightResults);
     if(lastCalendarDays.length) renderPriceCalendar(lastCalendarDays);
+    if(typeof lastDeals !== "undefined" && lastDeals.length) renderDeals(lastDeals);
   }catch(e){ console.warn("CBU kursini olishda xatolik:", e); }
 }
 loadCbuRate();
@@ -317,6 +319,98 @@ window.schedulePriceCalendar=function(delay=350){
 };
 document.getElementById("pc-refresh")?.addEventListener("click",()=>loadPriceCalendar());
 schedulePriceCalendar(150);
+
+
+// ==================== 🔥 AVTO NARX TAVSIYALARI (TOP DEALS) ====================
+let lastDeals = [];
+let dealsLoading = false;
+
+const CITY_NAME_MAP = {
+  TAS:"Toshkent", NMA:"Namangan", SKD:"Samarqand", FEG:"Farg'ona", BHK:"Buxoro",
+  AZN:"Andijon", UGC:"Urganch", TMJ:"Termiz", NVI:"Navoiy", KSQ:"Qarshi", NCU:"Nukus",
+  JED:"Jidda", MED:"Madina", RUH:"Ar-Riyod", DMM:"Dammam"
+};
+
+function dealPriceLabel(price){
+  const p = Number(price) || 0;
+  if(currentCurrency === "UZS"){
+    const uzs = Math.round(p * UZS_RATE);
+    return `${uzs.toLocaleString("uz-UZ").replace(/,/g," ")} so'm`;
+  }
+  return `$${Math.round(p)}`;
+}
+
+function shortDate(iso){
+  const d = parseISODate(iso);
+  if(!d) return "";
+  return `${d.getDate()} ${UZ_MONTHS_SHORT[d.getMonth()]}`;
+}
+
+function renderDeals(deals){
+  const strip = document.getElementById("deals-strip");
+  if(!strip) return;
+  if(!deals || !deals.length){
+    strip.innerHTML = `<div class="deals-empty">Hozircha takliflar yo'q. 🔄 tugmasi orqali yangilang.</div>`;
+    return;
+  }
+  strip.innerHTML = "";
+  deals.forEach((d, idx) => {
+    const originName = d.origin_name || CITY_NAME_MAP[d.origin] || d.origin;
+    const destName = d.destination_name || CITY_NAME_MAP[d.destination] || d.destination;
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = ["deal-card", d.is_cheapest ? "best" : ""].join(" ").trim();
+    card.innerHTML = `
+      ${d.is_cheapest ? '<span class="deal-badge">🏆 ENG ARZON</span>' : ""}
+      <span class="deal-route">
+        <b>${d.origin}</b><span class="deal-arrow">✈</span><b>${d.destination}</b>
+      </span>
+      <span class="deal-cities">${originName} → ${destName}</span>
+      <span class="deal-price">${dealPriceLabel(d.price)}</span>
+      <span class="deal-date">📅 ${shortDate(d.depart_date)}${d.days_left != null ? ` · ${d.days_left} kun` : ""}</span>
+    `;
+    card.addEventListener("click", () => applyDeal(d));
+    strip.appendChild(card);
+    if(idx === 0) card.classList.add("first");
+  });
+}
+
+function applyDeal(deal){
+  const originName = deal.origin_name || CITY_NAME_MAP[deal.origin] || deal.origin;
+  const destName = deal.destination_name || CITY_NAME_MAP[deal.destination] || deal.destination;
+  setRoute(deal.origin, originName, deal.destination, destName);
+  if(deal.depart_date) selectCalendarDay(deal.depart_date);
+  if(tg.HapticFeedback?.impactOccurred){ try{ tg.HapticFeedback.impactOccurred("light"); }catch(e){} }
+  document.getElementById("btn-search")?.scrollIntoView({behavior:"smooth", block:"center"});
+  // Tavsiyani bosgan zahoti qidiruvni ishga tushiramiz
+  setTimeout(()=>document.getElementById("btn-search")?.click(), 260);
+}
+
+async function loadTopDeals(refresh=false){
+  const strip = document.getElementById("deals-strip");
+  const sub = document.getElementById("deals-sub");
+  if(!strip || dealsLoading) return;
+  dealsLoading = true;
+  if(refresh) strip.innerHTML = `<div class="deals-skeleton"></div><div class="deals-skeleton"></div><div class="deals-skeleton"></div>`;
+  try{
+    const res = await fetch(`${API_BASE_URL}/api/top-deals?limit=8${refresh ? "&refresh=true" : ""}`);
+    if(!res.ok) throw new Error("Takliflar yuklanmadi");
+    const data = await res.json();
+    if(data.rate) UZS_RATE = Number(data.rate) || UZS_RATE;
+    lastDeals = data.deals || [];
+    renderDeals(lastDeals);
+    const w = data.window || {};
+    if(sub) sub.textContent = `Yaqin ${w.min_days ?? 3}–${w.max_days ?? 35} kun · ${data.updated_at || ""} da yangilandi`;
+  }catch(e){
+    console.warn("Takliflar xatosi:", e);
+    strip.innerHTML = `<div class="deals-empty">Narxlarni yuklab bo'lmadi. 🔄 tugmasi orqali qayta urinib ko'ring.</div>`;
+  }finally{ dealsLoading = false; }
+}
+
+document.getElementById("deals-refresh")?.addEventListener("click", ()=>loadTopDeals(true));
+loadTopDeals();
+// Har 10 daqiqada narxlar avtomatik yangilanib turadi
+setInterval(()=>loadTopDeals(), 10 * 60 * 1000);
 
 
 // ==================== 3D KARTA v10 ====================
