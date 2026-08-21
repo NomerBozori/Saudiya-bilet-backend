@@ -2,7 +2,7 @@
 const API_BASE_URL = "";
 const ADMIN_TG_USERNAME = "nuriddinovdfg";
 let UZS_RATE = 12850; // Markaziy Bank (CBU) kursi bilan avtomatik yangilanadi
-const APP_VERSION = "v11 — Premium Gold Edition";
+const APP_VERSION = "v12";
 
 let currentCurrency = "USD";
 let lastFlightResults = [];
@@ -550,18 +550,20 @@ window.openBoardingPass=function(html){ const modal=document.getElementById("bp-
 
 // ==================== ZAXIRA REYSLAR ====================
 function generateComprehensiveFlights(origin, destination, date){
+  // MUHIM: bular haqiqiy bron qilingan reyslar EMAS — jadval bo'yicha taxminiy
+  // variantlar. Narx va joylar admin tomonidan tasdiqlanadi (source: "estimate").
   const originCode=(origin||"TAS").toUpperCase();
   const destCode=(destination||"JED").toUpperCase();
   const airlinesPool=[
-    {name:"Centrum Air", flightNum:"C6-331", depTime:"06:30", arrTime:"10:15", duration:"5s 45d", price:380, baggage:"30 kg + 7 kg", direct:true, tag:"⭐ Bizning Reys — Premium"},
-    {name:"Uzbekistan Airways", flightNum:"HY-3381", depTime:"09:45", arrTime:"13:20", duration:"5s 35d", price:420, baggage:"30 kg + 8 kg", direct:true, tag:"🔥 Eng Ommabop"},
-    {name:"Flynas", flightNum:"XY-612", depTime:"14:15", arrTime:"18:00", duration:"5s 45d", price:370, baggage:"20 kg + 7 kg", direct:true, tag:"💰 Hamyonbop — Gold"},
-    {name:"Saudia (VIP)", flightNum:"SV-841", depTime:"18:20", arrTime:"22:05", duration:"5s 45d", price:460, baggage:"2x23 kg (46 kg)", direct:true, tag:"👑 Premium Klass"},
-    {name:"Panorama Airways", flightNum:"5P-552", depTime:"04:00", arrTime:"07:45", duration:"5s 45d", price:390, baggage:"30 kg + 7 kg", direct:true, tag:"⭐ To'g'ridan-to'g'ri"},
-    {name:"Air Arabia", flightNum:"G9-224", depTime:"11:20", arrTime:"17:40", duration:"7s 20d", price:325, baggage:"30 kg + 7 kg", direct:false, tag:"💸 Arzon Narx (Tranzit)"},
-    {name:"Jazeera Airways", flightNum:"J9-682", depTime:"05:10", arrTime:"10:30", duration:"6s 20d", price:335, baggage:"30 kg + 7 kg", direct:false, tag:"✈️ Qulay Tranzit"}
+    {name:"Centrum Air", flightNum:"C6-331", depTime:"06:30", arrTime:"10:15", duration:"5s 45d", price:380, baggage:"30 kg + 7 kg", direct:true},
+    {name:"Uzbekistan Airways", flightNum:"HY-3381", depTime:"09:45", arrTime:"13:20", duration:"5s 35d", price:420, baggage:"30 kg + 8 kg", direct:true},
+    {name:"Flynas", flightNum:"XY-612", depTime:"14:15", arrTime:"18:00", duration:"5s 45d", price:370, baggage:"20 kg + 7 kg", direct:true},
+    {name:"Saudia", flightNum:"SV-841", depTime:"18:20", arrTime:"22:05", duration:"5s 45d", price:460, baggage:"2x23 kg (46 kg)", direct:true},
+    {name:"Panorama Airways", flightNum:"5P-552", depTime:"04:00", arrTime:"07:45", duration:"5s 45d", price:390, baggage:"30 kg + 7 kg", direct:true},
+    {name:"Air Arabia", flightNum:"G9-224", depTime:"11:20", arrTime:"17:40", duration:"7s 20d", price:325, baggage:"30 kg + 7 kg", direct:false},
+    {name:"Jazeera Airways", flightNum:"J9-682", depTime:"05:10", arrTime:"10:30", duration:"6s 20d", price:335, baggage:"30 kg + 7 kg", direct:false}
   ];
-  return airlinesPool.map((item,idx)=>({ origin:originCode, destination:destCode, price:item.price, airline:item.name, flight_number:item.flightNum, departure_time:item.depTime, arrival_time:item.arrTime, duration:item.duration, baggage:item.baggage, transfers:item.direct?0:1, seats_available:5+(idx*2), source:"direct_agency", tag:item.tag }));
+  return airlinesPool.map((item,idx)=>({ origin:originCode, destination:destCode, price:item.price, airline:item.name, flight_number:item.flightNum, departure_time:item.depTime, arrival_time:item.arrTime, duration:item.duration, baggage:item.baggage, transfers:item.direct?0:1, source:"estimate" }));
 }
 
 // ==================== QIDIRUV ====================
@@ -576,7 +578,7 @@ if(btnSearch){
     if(!departDate){ tg.showAlert("Iltimos, jo'nash sanasini tanlang."); return; }
     state.origin=origin.toUpperCase(); state.destination=destination.toUpperCase(); state.departDate=departDate; state.passengers=passengers;
     tg.MainButton?.showProgress();
-    btnSearch.innerHTML='<span>⏳ Qidirilmoqda... Premium reyslar</span>';
+    btnSearch.innerHTML='<span>⏳ Reyslar qidirilmoqda...</span>';
     btnSearch.disabled=true;
     try{
       const url=`${API_BASE_URL}/api/search?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&depart_date=${encodeURIComponent(departDate)}`;
@@ -596,7 +598,7 @@ if(btnSearch){
       showScreen("screen-results");
     } finally {
       tg.MainButton?.hideProgress();
-      btnSearch.innerHTML='<span>✈️ Barcha Chiptalarni Qidirish — Premium</span>';
+      btnSearch.innerHTML='<span>✈️ Barcha Chiptalarni Qidirish</span>';
       btnSearch.disabled=false;
     }
   });
@@ -612,9 +614,6 @@ function durationToMinutes(text){
   if(!m) return 345;
   return Number(m[1])*60 + Number(m[2]||0);
 }
-function resultSeat(idx){ return `${10+(idx%22)}${"ABCDEF"[idx%6]}`; }
-function resultGate(dest, idx){ const map={JED:"C12", MED:"B07", RUH:"A04"}; return map[(dest||"").toUpperCase()]||`D${String((idx%18)+1).padStart(2,"0")}`; }
-
 // ==================== NATIJALAR — BOARDING PASS DIZAYNI ====================
 function flightBoardingPassHTML(f, idx){
   const origin=(f.origin||state.origin||"TAS").toUpperCase();
@@ -627,17 +626,26 @@ function flightBoardingPassHTML(f, idx){
   const arrTime=f.arrival_time||addMinutesToTime(depTime, durationToMinutes(duration));
   const transfers=Number(f.transfers||0);
   const transferText=transfers===0?"TO‘G‘RIDAN-TO‘G‘RI":`${transfers} TA TRANZIT`;
-  const tagText=f.tag||(transfers===0?"⭐ To'g'ridan-to'g'ri":"✈️ Qulay tranzit");
   const baggageText=f.baggage||"30 kg + 7 kg";
-  const seatsText=f.seats_available?`${f.seats_available} ta joy`:"Joylar bor";
-  const seat=resultSeat(idx);
-  const gate=resultGate(dest, idx);
   const price=formatPrice(f.price);
   const date=state.departDate||"-";
+
+  // Narx manbasi — halol ko'rsatiladi
+  const src=f.source||"estimate";
+  const isLive=src==="api";
+  const isManual=src==="manual";
+  const statusText=isLive
+    ? "✅ Jonli narx (aviakassa bazasi)"
+    : isManual
+      ? "✅ Tasdiqlangan chipta (bizning bazamiz)"
+      : "⚠️ Taxminiy narx — admin tasdiqlaydi";
+  const statusClass=isLive?"live":(isManual?"manual":"estimate");
+  const seatsText=f.seats_available?`${f.seats_available} ta joy`:"So'rov bo'yicha";
+
   return `
     <article class="bp-ticket bp-result" data-idx="${idx}">
       <div class="bp-main">
-        <div class="bp-kicker"><span>SAUDIYA BILETLAR ✦ BOARDING PASS</span><span>${airlineName} · ${flightNumber}</span></div>
+        <div class="bp-kicker"><span>SAUDIYA BILETLAR ✦ REYS TAKLIFI</span><span>${airlineName} · ${flightNumber}</span></div>
         <div class="bp-route">
           <div><div class="bp-iata">${origin}</div><div class="bp-city">${CITY_NAMES[origin]||origin} · ${depTime}</div></div>
           <div class="bp-plane">✈</div>
@@ -649,8 +657,8 @@ function flightBoardingPassHTML(f, idx){
           <div class="bp-cell"><span>UCHISH</span><strong>${depTime}</strong></div>
           <div class="bp-cell"><span>QO‘NISH</span><strong>${arrTime}</strong></div>
           <div class="bp-cell"><span>REYS</span><strong>${flightNumber}</strong></div>
-          <div class="bp-cell"><span>DARVOZA</span><strong>${gate}</strong></div>
-          <div class="bp-cell"><span>O‘RINLAR</span><strong>${seatsText}</strong></div>
+          <div class="bp-cell"><span>BAGAJ</span><strong>${baggageText}</strong></div>
+          <div class="bp-cell"><span>JOYLAR</span><strong>${seatsText}</strong></div>
         </div>
         <div class="bp-price-row">
           <div>
@@ -659,11 +667,11 @@ function flightBoardingPassHTML(f, idx){
           </div>
           <button type="button" class="bp-book-btn" data-book="${idx}">🎫 Band qilish</button>
         </div>
-        <span class="bp-status">${tagText}</span>
+        <span class="bp-status ${statusClass}">${statusText}</span>
       </div>
       <div class="bp-stub">
-        <div class="bp-stub-title">BOARDING</div>
-        <div><div class="bp-stub-seat">${seat}</div><div class="bp-stub-gate">GATE ${gate}</div></div>
+        <div class="bp-stub-title">REYS</div>
+        <div><div class="bp-stub-seat">${flightNumber}</div><div class="bp-stub-gate">${transfers===0?"TO‘G‘RI":"TRANZIT"}</div></div>
         <div class="bp-bars" aria-hidden="true"></div>
       </div>
     </article>
@@ -682,7 +690,7 @@ function renderResults(flights){
     return;
   }
   if(empty) empty.classList.add("hidden");
-  if(countBadge) countBadge.innerText=`${flights.length} ta premium reys topildi ✦`;
+  if(countBadge) countBadge.innerText=`${flights.length} ta reys topildi`;
 
   flights.forEach((f,idx)=>{
     const wrap=document.createElement("div");
@@ -693,6 +701,14 @@ function renderResults(flights){
     wrap.querySelector("[data-book]")?.addEventListener("click",(e)=>{ e.stopPropagation(); selectFlight(f); });
     wrap.querySelector(".bp-ticket")?.addEventListener("click",()=>openBoardingPass(flightBoardingPassHTML(f, idx)));
   });
+
+  const liveCount=flights.filter(f=>(f.source||"")==="api"||(f.source||"")==="manual").length;
+  const note=document.createElement("p");
+  note.className="results-note";
+  note.innerHTML=liveCount
+    ? `✅ ${liveCount} ta jonli/tasdiqlangan narx · ⚠️ qolganlari <b>taxminiy</b> — admin tasdiqlagach yakuniy narx aytiladi`
+    : `⚠️ Narxlar <b>taxminiy</b> (jadval bo'yicha). Yakuniy narx va joy mavjudligi admin tomonidan tasdiqlanadi.`;
+  list.appendChild(note);
 }
 
 // ==================== TANLASH ====================
@@ -702,14 +718,14 @@ function selectFlight(flight){
   if(summaryEl){
     summaryEl.innerHTML=`
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <h3 style="font-size: 15px; font-weight: 800; color: var(--primary);">📋 Tanlangan — Premium</h3>
+        <h3 style="font-size: 15px; font-weight: 800; color: var(--primary);">📋 Tanlangan reys</h3>
         <span style="font-size:10px; background: linear-gradient(135deg,#D4AF37,#F3D77A); color:#0B1B3A; padding:3px 8px; border-radius:8px; font-weight:800;">GOLD EDITION</span>
       </div>
       <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; margin-bottom: 4px;">
         <span>✈️ ${state.origin} ➔ ${state.destination}</span>
         <span style="color: var(--primary); font-size: 16px;">${formatPrice(flight.price)}</span>
       </div>
-      <div style="font-size: 12px; color: var(--text-muted);">🛫 ${flight.airline||"Aviakompaniya"} | 📅 ${state.departDate} | 👥 ${state.passengers} yo'lovchi — Premium xizmat</div>
+      <div style="font-size: 12px; color: var(--text-muted);">🛫 ${flight.airline||"Aviakompaniya"} | 📅 ${state.departDate} | 👥 ${state.passengers} yo'lovchi</div>
     `;
   }
   showScreen("screen-passport");
@@ -775,7 +791,7 @@ async function loadUserOrders(){
   const list=document.getElementById("user-orders-list");
   const empty=document.getElementById("user-orders-empty");
   if(!list) return;
-  list.innerHTML=`<div style="text-align:center; padding:20px; font-size:13px; color:var(--text-muted);">⏳ Premium buyurtmalar yuklanmoqda...</div>`;
+  list.innerHTML=`<div style="text-align:center; padding:20px; font-size:13px; color:var(--text-muted);">⏳ Buyurtmalar yuklanmoqda...</div>`;
   if(empty) empty.classList.add("hidden");
   try{
     const res=await fetch(`${API_BASE_URL}/api/my-orders?telegram_user_id=${user.id}`);
@@ -795,3 +811,24 @@ async function loadUserOrders(){
   } catch(e){ list.innerHTML=`<div style="text-align:center; padding:20px; font-size:13px; color:var(--danger);">Buyurtmalarni yuklashda xato yuz berdi.</div>`; }
 }
 console.log(`Saudiya Biletlar ${APP_VERSION} — Yangi dizayn yuklandi ✈️`);
+
+// ==================== BUILD VERSIYASI (eski deployni aniqlash) ====================
+const UI_BUILD = "v12";
+async function showBuildInfo(){
+  const el = document.getElementById("app-build");
+  if(!el) return;
+  try{
+    const res = await fetch(`${API_BASE_URL}/api/version?t=${Date.now()}`, { cache: "no-store" });
+    if(!res.ok) throw new Error("version yo'q");
+    const data = await res.json();
+    const backend = data.build || "?";
+    const match = backend === UI_BUILD;
+    el.textContent = `UI ${UI_BUILD} · Backend ${backend}${match ? " ✅" : " ⚠️ eski deploy"}`;
+    el.classList.toggle("stale", !match);
+  }catch(e){
+    // Eski backendda /api/version umuman yo'q — demak eski deploy ishlayapti
+    el.textContent = `UI ${UI_BUILD} · Backend: eski versiya ⚠️`;
+    el.classList.add("stale");
+  }
+}
+showBuildInfo();

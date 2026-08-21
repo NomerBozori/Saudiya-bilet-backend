@@ -1392,3 +1392,38 @@ body.tg-body {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* Natijalar: narx manbasi haqida halol belgilar */
+.bp-status.live { background: rgba(16,185,129,0.18); color: #6EE7B7; }
+.bp-status.manual { background: rgba(59,130,246,0.18); color: #93C5FD; }
+.bp-status.estimate { background: rgba(245,158,11,0.20); color: #FCD34D; }
+.results-note {
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--tg-theme-hint-color, #64748B);
+  background: rgba(245,158,11,0.10);
+  border: 1px solid rgba(245,158,11,0.28);
+  border-radius: 12px;
+  padding: 9px 12px;
+  margin: 2px 0 12px;
+}
+
+/* Build versiyasi ko'rsatkichi */
+.app-build {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--tg-theme-hint-color, #8FA0BC);
+  padding: 10px 12px 22px;
+  letter-spacing: 0.3px;
+  opacity: 0.85;
+}
+.app-build.stale {
+  color: #B45309;
+  background: rgba(245,158,11,0.12);
+  border-radius: 10px;
+  margin: 0 12px 16px;
+  padding: 8px 10px;
+  opacity: 1;
+}
