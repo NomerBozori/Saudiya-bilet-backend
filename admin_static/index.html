@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="admin.css?v=6">
+    <link rel="stylesheet" href="admin.css?v=7">
 </head>
 <body>
 
@@ -91,6 +91,8 @@
                 <button class="a-tab active" data-tab="orders">📋 Buyurtmalar Nazorati</button>
                 <button class="a-tab" data-tab="flights">➕ Yangi Chipta Qo'shish</button>
                 <button class="a-tab" data-tab="all-flights">✈️ Mavjud Chiptalar Ro'yxati</button>
+                <button class="a-tab" data-tab="visa-applications">📑 Viza Arizalari</button>
+                <button class="a-tab" data-tab="price-alerts">🔔 Narx Obunalari</button>
             </nav>
 
             <main class="a-main">
@@ -202,6 +204,47 @@
                     <div id="flights-list" class="a-list"></div>
                 </section>
 
+                <!-- 4-TAB: VIZA ARIZALARI -->
+                <section id="tab-visa-applications" class="a-tab-content hidden">
+                    <div class="a-filter-card">
+                        <div class="a-filter-grid">
+                            <div class="a-filter-item">
+                                <label class="a-label">Ariza holati:</label>
+                                <select id="visa-status-filter" class="a-select">
+                                    <option value="">Barcha arizalar</option>
+                                    <option value="new">🆕 Yangi</option>
+                                    <option value="processing">⏳ Ko'rib chiqilmoqda</option>
+                                    <option value="approved">✅ Tasdiqlangan</option>
+                                    <option value="rejected">❌ Rad etilgan</option>
+                                </select>
+                            </div>
+                            <div class="a-filter-item flex-end">
+                                <button id="refresh-visa-btn" class="a-btn-secondary">🔄 Yangilash</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="visa-admin-list" class="a-list"></div>
+                </section>
+
+                <!-- 5-TAB: NARX OBUNALARI -->
+                <section id="tab-price-alerts" class="a-tab-content hidden">
+                    <div class="a-filter-card">
+                        <div class="a-filter-grid">
+                            <div class="a-filter-item">
+                                <label class="a-label">Ko'rinish:</label>
+                                <select id="price-alert-filter" class="a-select">
+                                    <option value="false">Barcha obunalar</option>
+                                    <option value="true">Faqat faol obunalar</option>
+                                </select>
+                            </div>
+                            <div class="a-filter-item flex-end">
+                                <button id="refresh-price-alerts-btn" class="a-btn-secondary">🔄 Yangilash</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="price-alerts-admin-list" class="a-list"></div>
+                </section>
+
             </main>
         </div>
     </div>
@@ -230,6 +273,6 @@
         </div>
     </div>
 
-    <script src="admin.js?v=6"></script>
+    <script src="admin.js?v=7"></script>
 </body>
 </html>

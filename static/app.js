@@ -2,7 +2,7 @@
 const API_BASE_URL = "";
 const ADMIN_TG_USERNAME = "nuriddinovdfg";
 let UZS_RATE = 12850; // Markaziy Bank (CBU) kursi bilan avtomatik yangilanadi
-const APP_VERSION = "v12";
+const APP_VERSION = "v13";
 
 let currentCurrency = "USD";
 let lastFlightResults = [];
@@ -40,6 +40,23 @@ document.querySelectorAll(".tg-curr-btn").forEach(btn => {
     if (typeof lastDeals !== "undefined" && lastDeals.length) renderDeals(lastDeals);
   });
 });
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>'"]/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
+  })[ch]);
+}
+
+async function apiJson(url, options={}) {
+  const res = await fetch(url, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || "Xatolik yuz berdi");
+  return data;
+}
+
+function telegramHeaders(extra={}) {
+  return {"X-Telegram-Init-Data": tg.initData || "", ...extra};
+}
 
 function formatPrice(usdPrice) {
   const price = Number(usdPrice) || 0;
@@ -97,9 +114,13 @@ document.querySelectorAll(".tg-tab-btn").forEach(btn => {
       targetPane.classList.add("active");
       if (btn.dataset.tab === "tab-orders") loadUserOrders();
       if (btn.dataset.tab === "tab-calc") calculateCustomFare();
+      if (btn.dataset.tab === "tab-visa") loadVisaApplications();
+      if (btn.dataset.tab === "tab-search") loadPriceAlerts();
     }
   });
 });
+const initialTab=new URLSearchParams(window.location.search).get("tab");
+if(initialTab==="visa") document.querySelector('[data-tab="tab-visa"]')?.click();
 
 window.setRoute = function(fromCode, fromName, toCode, toName) {
   const originEl = document.getElementById("origin");
@@ -113,6 +134,7 @@ window.setRoute = function(fromCode, fromName, toCode, toName) {
   // subtle animation
   if (originEl) { originEl.animate([{transform:'scale(1.02)'},{transform:'scale(1)'}], {duration:240}); }
   window.schedulePriceCalendar?.(120);
+  syncPriceAlertRoute();
 };
 
 function showScreen(id) {
@@ -160,6 +182,7 @@ async function fetchSuggestions(term, box, input, hidden) {
         hidden.value = item.code;
         box.classList.add("hidden");
         window.schedulePriceCalendar?.(150);
+        syncPriceAlertRoute();
       });
       box.appendChild(el);
     });
@@ -208,7 +231,7 @@ function createCalendar({dropdownId, triggerId, labelId, inputId, minDate, start
       <div class="tg-cal-grid">${daysHtml}</div>
     `;
     dropdown.querySelectorAll("[data-nav]").forEach(btn=>{ btn.addEventListener("click",(e)=>{ e.stopPropagation(); view.setMonth(view.getMonth()+Number(btn.dataset.nav)); render(); }); });
-    dropdown.querySelectorAll(".tg-cal-day[data-iso]").forEach(btn=>{ btn.addEventListener("click",(e)=>{ e.stopPropagation(); setValue(btn.dataset.iso); dropdown.classList.add("hidden"); trigger.classList.remove("open"); if(inputId==="depart_date") window.schedulePriceCalendar?.(120); }); });
+    dropdown.querySelectorAll(".tg-cal-day[data-iso]").forEach(btn=>{ btn.addEventListener("click",(e)=>{ e.stopPropagation(); setValue(btn.dataset.iso); dropdown.classList.add("hidden"); trigger.classList.remove("open"); if(inputId==="depart_date"){ window.schedulePriceCalendar?.(120); syncPriceAlertRoute(btn.dataset.iso); } }); });
   }
   trigger.addEventListener("click",(e)=>{
     e.stopPropagation();
@@ -283,6 +306,7 @@ function selectCalendarDay(iso){
   if(input) input.value=iso;
   if(label) label.textContent=formatUzDate(iso);
   state.departDate=iso;
+  syncPriceAlertRoute(iso);
   document.querySelectorAll("#price-calendar .pc-day").forEach(el=>{
     el.classList.toggle("selected", el.dataset.iso===iso);
   });
@@ -319,6 +343,118 @@ window.schedulePriceCalendar=function(delay=350){
 };
 document.getElementById("pc-refresh")?.addEventListener("click",()=>loadPriceCalendar());
 schedulePriceCalendar(150);
+
+
+// ==================== NARX TUSHGANDA TELEGRAM OBUNASI ====================
+function syncPriceAlertRoute(selectedDate=null){
+  const {origin, destination}=currentRouteCodes();
+  const routeEl=document.getElementById("price-alert-route");
+  if(routeEl) routeEl.textContent=`${origin} ➔ ${destination} yo'nalishi`;
+
+  const fromEl=document.getElementById("alert-date-from");
+  const toEl=document.getElementById("alert-date-to");
+  const start=selectedDate || document.getElementById("depart_date")?.value || isoDate(defaultDepart);
+  if(fromEl && (selectedDate || !fromEl.value)) fromEl.value=start;
+  if(toEl && (selectedDate || !toEl.value)){
+    const end=parseISODate(start) || new Date();
+    end.setDate(end.getDate()+29);
+    toEl.value=isoDate(end);
+  }
+  const today=isoDate(new Date());
+  if(fromEl) fromEl.min=today;
+  if(toEl) toEl.min=fromEl?.value || today;
+}
+
+document.getElementById("alert-date-from")?.addEventListener("change", e=>{
+  const toEl=document.getElementById("alert-date-to");
+  if(!toEl) return;
+  toEl.min=e.target.value;
+  if(!toEl.value || toEl.value<e.target.value){
+    const end=parseISODate(e.target.value) || new Date();
+    end.setDate(end.getDate()+29);
+    toEl.value=isoDate(end);
+  }
+});
+
+function renderPriceAlerts(alerts){
+  const list=document.getElementById("price-alerts-list");
+  if(!list) return;
+  if(!alerts?.length){ list.innerHTML=""; return; }
+  const statusText=a=>a.is_active ? "Faol" : (a.last_notified_at ? "Xabar yuborildi" : "Bekor qilingan");
+  list.innerHTML=alerts.slice(0,5).map(a=>`
+    <div class="price-alert-item ${a.is_active ? "active" : "inactive"}">
+      <div>
+        <strong>🔔 ${escapeHtml(a.origin)} ➔ ${escapeHtml(a.destination)} · $${Number(a.target_price).toLocaleString()}</strong>
+        <span>${escapeHtml(a.date_from)} — ${escapeHtml(a.date_to)} · ${statusText(a)}${a.last_price!=null ? ` · oxirgi $${Number(a.last_price).toLocaleString()}` : ""}</span>
+      </div>
+      ${a.is_active ? `<button type="button" class="price-alert-cancel" data-alert-id="${Number(a.id)}">Bekor qilish</button>` : ""}
+    </div>
+  `).join("");
+  list.querySelectorAll("[data-alert-id]").forEach(btn=>{
+    btn.addEventListener("click",()=>cancelPriceAlert(Number(btn.dataset.alertId)));
+  });
+}
+
+async function loadPriceAlerts(){
+  const list=document.getElementById("price-alerts-list");
+  if(!list) return;
+  if(!user.id || Number(user.id)<=0){
+    list.innerHTML='<p class="price-alert-login-hint">Obuna uchun Mini Appni Telegram ichidan oching.</p>';
+    return;
+  }
+  try{
+    const data=await apiJson(
+      `${API_BASE_URL}/api/price-alerts?telegram_user_id=${encodeURIComponent(user.id)}`,
+      {headers:telegramHeaders()},
+    );
+    renderPriceAlerts(data.alerts||[]);
+  }catch(e){
+    list.innerHTML=`<p class="price-alert-login-hint">${escapeHtml(e.message)}</p>`;
+  }
+}
+
+async function cancelPriceAlert(alertId){
+  if(!confirm("Narx obunasini bekor qilasizmi?")) return;
+  try{
+    await apiJson(`${API_BASE_URL}/api/price-alerts/${alertId}?telegram_user_id=${encodeURIComponent(user.id)}`, {
+      method:"DELETE", headers:telegramHeaders(),
+    });
+    await loadPriceAlerts();
+  }catch(e){ tg.showAlert(e.message); }
+}
+
+const btnPriceAlert=document.getElementById("btn-price-alert");
+btnPriceAlert?.addEventListener("click", async()=>{
+  if(!user.id || Number(user.id)<=0){ tg.showAlert("Obuna uchun Mini Appni Telegram ichidan oching."); return; }
+  const {origin, destination}=currentRouteCodes();
+  const dateFrom=document.getElementById("alert-date-from")?.value||"";
+  const dateTo=document.getElementById("alert-date-to")?.value||"";
+  const targetPrice=Number(document.getElementById("alert-target-price")?.value||0);
+  if(!dateFrom||!dateTo||targetPrice<=0){ tg.showAlert("Sanalar va maqsadli narxni to'g'ri kiriting."); return; }
+  const oldText=btnPriceAlert.innerText;
+  btnPriceAlert.disabled=true;
+  btnPriceAlert.innerText="⏳ Saqlanmoqda...";
+  try{
+    await apiJson(`${API_BASE_URL}/api/price-alerts`, {
+      method:"POST",
+      headers:telegramHeaders({"Content-Type":"application/json"}),
+      body:JSON.stringify({
+        telegram_user_id:user.id,
+        username:user.username||null,
+        origin, destination,
+        date_from:dateFrom,
+        date_to:dateTo,
+        target_price:targetPrice,
+      }),
+    });
+    tg.showAlert("✅ Obuna saqlandi. Narx tushsa bot xabar beradi.");
+    await loadPriceAlerts();
+  }catch(e){ tg.showAlert(e.message); }
+  finally{ btnPriceAlert.disabled=false; btnPriceAlert.innerText=oldText; }
+});
+
+syncPriceAlertRoute();
+loadPriceAlerts();
 
 
 // ==================== 🔥 AVTO NARX TAVSIYALARI (TOP DEALS) ====================
@@ -786,6 +922,120 @@ if(btnNewOrder){
   });
 }
 
+// ==================== VIZA ARIZALARI ====================
+const VISA_TYPE_LABELS={
+  tourist_multi:"1 yillik Multi Turistik Viza",
+  umrah_nusuk:"Rasmiy Umra Vizasi (Nusuk)",
+};
+const VISA_STATUS_LABELS={
+  new:"🆕 Yangi",
+  processing:"⏳ Ko'rib chiqilmoqda",
+  approved:"✅ Tasdiqlangan",
+  rejected:"❌ Rad etilgan",
+};
+
+function showVisaFormMessage(message, isError=false){
+  const el=document.getElementById("visa-form-message");
+  if(!el) return;
+  el.textContent=message;
+  el.classList.remove("hidden", "error", "success");
+  el.classList.add(isError?"error":"success");
+}
+
+document.querySelectorAll(".visa-choose-btn").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    const select=document.getElementById("visa-type");
+    if(select) select.value=btn.dataset.visaType;
+    document.getElementById("visa-form-card")?.scrollIntoView({behavior:"smooth", block:"start"});
+  });
+});
+
+function renderVisaApplications(applications){
+  const list=document.getElementById("visa-applications-list");
+  if(!list) return;
+  if(!applications?.length){
+    list.innerHTML='<p class="visa-empty">Hozircha viza arizangiz yo\'q.</p>';
+    return;
+  }
+  list.innerHTML=applications.map(a=>`
+    <article class="visa-application-item ${escapeHtml(a.status||"new")}">
+      <div class="visa-application-top">
+        <strong>#${Number(a.id)||"-"} · ${escapeHtml(VISA_TYPE_LABELS[a.visa_type]||a.visa_type)}</strong>
+        <span>${escapeHtml(VISA_STATUS_LABELS[a.status]||a.status)}</span>
+      </div>
+      <p>👤 ${escapeHtml(a.first_name)} ${escapeHtml(a.last_name)} · 🛂 ${escapeHtml(a.passport_number)}</p>
+      <p>📅 Safar: ${escapeHtml(a.travel_date||"Belgilanmagan")}</p>
+      ${a.admin_note ? `<p class="visa-admin-note">📝 ${escapeHtml(a.admin_note)}</p>` : ""}
+    </article>
+  `).join("");
+}
+
+async function loadVisaApplications(){
+  const list=document.getElementById("visa-applications-list");
+  if(!list) return;
+  if(!user.id || Number(user.id)<=0){
+    list.innerHTML='<p class="visa-empty">Ariza yuborish uchun Mini Appni Telegram ichidan oching.</p>';
+    return;
+  }
+  list.innerHTML='<p class="visa-empty">⏳ Arizalar yuklanmoqda...</p>';
+  try{
+    const data=await apiJson(
+      `${API_BASE_URL}/api/visa-applications?telegram_user_id=${encodeURIComponent(user.id)}`,
+      {headers:telegramHeaders()},
+    );
+    renderVisaApplications(data.applications||[]);
+  }catch(e){ list.innerHTML=`<p class="visa-empty error">${escapeHtml(e.message)}</p>`; }
+}
+
+document.getElementById("refresh-visa-applications")?.addEventListener("click", loadVisaApplications);
+const visaTravelDate=document.getElementById("visa-travel-date");
+if(visaTravelDate) visaTravelDate.min=isoDate(new Date());
+const visaBirthDate=document.getElementById("visa-birth-date");
+if(visaBirthDate) visaBirthDate.max=isoDate(new Date());
+
+const btnSubmitVisa=document.getElementById("btn-submit-visa");
+btnSubmitVisa?.addEventListener("click", async()=>{
+  if(!user.id || Number(user.id)<=0){ tg.showAlert("Ariza uchun Mini Appni Telegram ichidan oching."); return; }
+  const payload={
+    telegram_user_id:user.id,
+    username:user.username||null,
+    visa_type:document.getElementById("visa-type")?.value||"",
+    first_name:document.getElementById("visa-first-name")?.value.trim()||"",
+    last_name:document.getElementById("visa-last-name")?.value.trim()||"",
+    phone:document.getElementById("visa-phone")?.value.trim()||"",
+    passport_number:document.getElementById("visa-passport")?.value.trim().toUpperCase()||"",
+    birth_date:document.getElementById("visa-birth-date")?.value||"",
+    travel_date:document.getElementById("visa-travel-date")?.value||null,
+    notes:document.getElementById("visa-notes")?.value.trim()||null,
+  };
+  if(!payload.first_name||!payload.last_name||!payload.phone||!payload.passport_number||!payload.birth_date){
+    showVisaFormMessage("Barcha majburiy maydonlarni to'ldiring.", true);
+    return;
+  }
+  if(!/^[A-Z0-9]{5,20}$/.test(payload.passport_number)){
+    showVisaFormMessage("Pasport raqamini to'g'ri kiriting (masalan FA1234567).", true);
+    return;
+  }
+
+  const oldText=btnSubmitVisa.innerText;
+  btnSubmitVisa.disabled=true;
+  btnSubmitVisa.innerText="⏳ Yuborilmoqda...";
+  try{
+    const data=await apiJson(`${API_BASE_URL}/api/visa-applications`, {
+      method:"POST",
+      headers:telegramHeaders({"Content-Type":"application/json"}),
+      body:JSON.stringify(payload),
+    });
+    showVisaFormMessage(`✅ Ariza #${data.application_id} qabul qilindi. Holati o'zgarsa bot xabar beradi.`);
+    ["visa-first-name","visa-last-name","visa-phone","visa-passport","visa-birth-date","visa-travel-date","visa-notes"].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.value="";
+    });
+    await loadVisaApplications();
+  }catch(e){ showVisaFormMessage(e.message, true); }
+  finally{ btnSubmitVisa.disabled=false; btnSubmitVisa.innerText=oldText; }
+});
+
+
 // ==================== USER ORDERS ====================
 async function loadUserOrders(){
   const list=document.getElementById("user-orders-list");
@@ -813,7 +1063,7 @@ async function loadUserOrders(){
 console.log(`Saudiya Biletlar ${APP_VERSION} — Yangi dizayn yuklandi ✈️`);
 
 // ==================== BUILD VERSIYASI (eski deployni aniqlash) ====================
-const UI_BUILD = "v12";
+const UI_BUILD = "v13";
 async function showBuildInfo(){
   const el = document.getElementById("app-build");
   if(!el) return;

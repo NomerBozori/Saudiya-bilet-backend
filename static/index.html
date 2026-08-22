@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=13">
 </head>
 <body class="tg-body">
 
@@ -123,6 +123,34 @@
               <span><i class="pc-dot cheap"></i> Eng arzon kun</span>
               <span><i class="pc-dot sel"></i> Tanlangan sana</span>
             </div>
+          </div>
+
+          <!-- NARX TUSHGANDA TELEGRAM OBUNASI -->
+          <div class="price-alert-card" id="price-alert-card">
+            <div class="price-alert-head">
+              <div>
+                <h3>🔔 Narx tushganda xabar bering</h3>
+                <p id="price-alert-route">TAS ➔ JED yo'nalishi</p>
+              </div>
+              <span class="price-alert-badge">TELEGRAM</span>
+            </div>
+            <div class="tg-grid-2 price-alert-dates">
+              <div>
+                <label class="tg-label" for="alert-date-from">Boshlanish sanasi</label>
+                <input id="alert-date-from" type="date" class="tg-input">
+              </div>
+              <div>
+                <label class="tg-label" for="alert-date-to">Tugash sanasi</label>
+                <input id="alert-date-to" type="date" class="tg-input">
+              </div>
+            </div>
+            <label class="tg-label" for="alert-target-price">Maqsadli narx ($ USD)</label>
+            <div class="price-alert-action">
+              <input id="alert-target-price" type="number" min="1" step="1" class="tg-input" placeholder="Masalan: 300">
+              <button type="button" id="btn-price-alert" class="tg-btn-secondary">🔔 Obuna bo'lish</button>
+            </div>
+            <p class="tg-hint">Haqiqiy narx belgilangan summaga tushsa, bot sizga bir marta xabar yuboradi.</p>
+            <div id="price-alerts-list" class="price-alerts-list"></div>
           </div>
 
           <!-- Tezkor tanlov tugmalari -->
@@ -330,35 +358,99 @@
       </div>
     </div>
 
-    <!-- ==================== 4. VIZA XIZMATI ==================== -->
+    <!-- ==================== 4. VIZA XIZMATI VA ARIZALAR ==================== -->
     <div id="tab-visa" class="tab-pane">
       <div class="tg-section-header">
         <h2 class="tg-section-title">📑 Saudiya Viza Xizmatlari</h2>
-        <p class="tg-section-desc">Tezkor, rasmiy va kafolatlangan viza rasmiylashtirish</p>
+        <p class="tg-section-desc">Arizani Mini Appda yuboring va holatini Telegram orqali kuzating</p>
       </div>
 
-      <div class="tg-service-card">
-        <div class="tg-srv-info">
-          <h3>📌 1 Yillik Multi Turistik Viza</h3>
-          <p>⏳ Amal qilish muddati: <strong>1 yil (har safar 90 kungacha)</strong></p>
-          <p>⏱ Tayyor bo'lish vaqti: <strong>24 – 48 soat ichida</strong></p>
-          <p>📄 Kerakli hujjat: Zagran pasport nusxasi va rasm</p>
+      <div class="visa-products">
+        <div class="tg-service-card">
+          <div class="tg-srv-info">
+            <h3>📌 1 Yillik Multi Turistik Viza</h3>
+            <p>⏳ Amal qilish muddati: <strong>1 yil (har safar 90 kungacha)</strong></p>
+            <p>⏱ Tayyor bo'lish vaqti: <strong>24 – 48 soat ichida</strong></p>
+            <p>📄 Kerakli hujjat: Zagran pasport nusxasi va rasm</p>
+          </div>
+          <div class="tg-srv-action">
+            <button type="button" class="tg-btn-primary visa-choose-btn" data-visa-type="tourist_multi">✍️ Ariza topshirish</button>
+          </div>
         </div>
-        <div class="tg-srv-action">
-          <a href="https://t.me/nuriddinovdfg?text=Assalomu%20alaykum!%201%20yillik%20Multi-viza%20rasmiylashtirmoqchiman" target="_blank" class="tg-btn-primary">✍️ Rasmiylashtirish</a>
+
+        <div class="tg-service-card">
+          <div class="tg-srv-info">
+            <h3>📌 Rasmiy Umra Vizasi (Nusuk)</h3>
+            <p>⏳ Amal qilish muddati: <strong>90 kunlik rasmiy ziyorat</strong></p>
+            <p>⏱ Tayyor bo'lish vaqti: <strong>1 – 3 ish kuni</strong></p>
+            <p>📄 Kerakli hujjat: Pasport, tibbiy sug'urta va rasm</p>
+          </div>
+          <div class="tg-srv-action">
+            <button type="button" class="tg-btn-primary visa-choose-btn" data-visa-type="umrah_nusuk">✍️ Ariza topshirish</button>
+          </div>
         </div>
       </div>
 
-      <div class="tg-service-card">
-        <div class="tg-srv-info">
-          <h3>📌 Rasmiy Umra Vizasi (Nusuk)</h3>
-          <p>⏳ Amal qilish muddati: <strong>90 kunlik rasmiy ziyorat</strong></p>
-          <p>⏱ Tayyor bo'lish vaqti: <strong>1 – 3 ish kuni</strong></p>
-          <p>📄 Kerakli hujjat: Pasport, tibbiy sug'urta va rasm</p>
+      <div class="tg-card visa-form-card" id="visa-form-card">
+        <div class="tg-card-header">
+          <h3 class="tg-card-title">📝 Viza arizasi</h3>
+          <p class="tg-text-muted">Ma'lumotlarni pasportdagidek lotin harflarida kiriting.</p>
         </div>
-        <div class="tg-srv-action">
-          <a href="https://t.me/nuriddinovdfg?text=Assalomu%20alaykum!%20Rasmiy%20Umra%20vizasi%20rasmiylashtirmoqchiman" target="_blank" class="tg-btn-primary">✍️ Rasmiylashtirish</a>
+
+        <label class="tg-label" for="visa-type">Viza turi</label>
+        <select id="visa-type" class="tg-input">
+          <option value="tourist_multi">1 yillik Multi Turistik Viza</option>
+          <option value="umrah_nusuk">Rasmiy Umra Vizasi (Nusuk)</option>
+        </select>
+
+        <div class="tg-grid-2">
+          <div>
+            <label class="tg-label" for="visa-first-name">Ism</label>
+            <input id="visa-first-name" class="tg-input" maxlength="80" placeholder="ALISHER">
+          </div>
+          <div>
+            <label class="tg-label" for="visa-last-name">Familiya</label>
+            <input id="visa-last-name" class="tg-input" maxlength="80" placeholder="QODIROV">
+          </div>
         </div>
+
+        <div class="tg-grid-2">
+          <div>
+            <label class="tg-label" for="visa-phone">Telefon raqami</label>
+            <input id="visa-phone" type="tel" class="tg-input" maxlength="30" placeholder="+998 90 123 45 67">
+          </div>
+          <div>
+            <label class="tg-label" for="visa-passport">Pasport raqami</label>
+            <input id="visa-passport" class="tg-input" maxlength="20" placeholder="FA1234567">
+          </div>
+        </div>
+
+        <div class="tg-grid-2">
+          <div>
+            <label class="tg-label" for="visa-birth-date">Tug'ilgan sana</label>
+            <input id="visa-birth-date" type="date" class="tg-input">
+          </div>
+          <div>
+            <label class="tg-label" for="visa-travel-date">Rejalashtirilgan safar</label>
+            <input id="visa-travel-date" type="date" class="tg-input">
+          </div>
+        </div>
+
+        <label class="tg-label" for="visa-notes">Qo'shimcha izoh (ixtiyoriy)</label>
+        <textarea id="visa-notes" class="tg-input visa-notes" maxlength="1000" rows="3" placeholder="Arizachilar soni yoki qo'shimcha savol..."></textarea>
+        <button type="button" id="btn-submit-visa" class="tg-btn-primary">📨 Viza arizasini yuborish</button>
+        <p id="visa-form-message" class="form-message hidden"></p>
+      </div>
+
+      <div class="tg-card visa-history-card">
+        <div class="tg-card-header flex-between">
+          <div>
+            <h3 class="tg-card-title">📋 Mening viza arizalarim</h3>
+            <p class="tg-text-muted">Ariza holati o'zgarsa bot xabar beradi.</p>
+          </div>
+          <button type="button" id="refresh-visa-applications" class="tg-btn-secondary compact">🔄</button>
+        </div>
+        <div id="visa-applications-list" class="visa-applications-list"></div>
       </div>
     </div>
 
@@ -401,8 +493,8 @@
   </div>
 
   <!-- Build versiyasi — deploy yangilanganini tekshirish uchun -->
-  <div class="app-build" id="app-build">UI v12 · backend: tekshirilmoqda...</div>
+  <div class="app-build" id="app-build">UI v13 · backend: tekshirilmoqda...</div>
 
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>
