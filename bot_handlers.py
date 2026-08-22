@@ -171,17 +171,9 @@ async def cb_visa_services(call: CallbackQuery):
         "• Tayyor bo'lish vaqti: <b>1–3 ish kuni</b>\n\n"
         "<i>Viza narxi va rasmiylashtirish uchun operatorimizga murojaat qiling:</i>"
     )
-    web_app_url = settings.WEBHOOK_BASE_URL.rstrip('/') if settings.WEBHOOK_BASE_URL else ""
-    visa_button = (
-        InlineKeyboardButton(
-            text="✍️ Mini Appda viza arizasini yuborish",
-            web_app=WebAppInfo(url=f"{web_app_url}/?tab=visa"),
-        )
-        if web_app_url.startswith("http")
-        else InlineKeyboardButton(
-            text=f"✍️ Viza Rasmiylashtirish (@{settings.ADMIN_USERNAME})",
-            url=f"https://t.me/{settings.ADMIN_USERNAME}",
-        )
+    visa_button = InlineKeyboardButton(
+        text=f"✍️ Viza Rasmiylashtirish (@{settings.ADMIN_USERNAME})",
+        url=f"https://t.me/{settings.ADMIN_USERNAME}",
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [visa_button],
