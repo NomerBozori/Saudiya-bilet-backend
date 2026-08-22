@@ -120,3 +120,128 @@ def delete_orders_by_status(status: str) -> int:
         pass
     supabase.table("orders").delete().in_("id", order_ids).execute()
     return len(order_ids)
+
+
+# ==================== VIZA ARIZALARI ====================
+def create_visa_application(data: dict) -> dict:
+    """Yangi viza arizasini saqlaydi."""
+    res = supabase.table("visa_applications").insert(data).execute()
+    return res.data[0] if res.data else data
+
+
+def get_visa_application(application_id: int) -> dict | None:
+    res = (
+        supabase.table("visa_applications")
+        .select("*")
+        .eq("id", application_id)
+        .maybe_single()
+        .execute()
+    )
+    return res.data if res else None
+
+
+def get_visa_applications_by_user(telegram_user_id: int, limit: int = 20) -> list[dict]:
+    res = (
+        supabase.table("visa_applications")
+        .select("*")
+        .eq("telegram_user_id", telegram_user_id)
+        .order("id", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return res.data or []
+
+
+def list_visa_applications(status: str | None = None, limit: int = 200) -> list[dict]:
+    query = supabase.table("visa_applications").select("*")
+    if status:
+        query = query.eq("status", status)
+    res = query.order("id", desc=True).limit(limit).execute()
+    return res.data or []
+
+
+def update_visa_application(application_id: int, data: dict) -> dict:
+    res = (
+        supabase.table("visa_applications")
+        .update(data)
+        .eq("id", application_id)
+        .execute()
+    )
+    return res.data[0] if res.data else data
+
+
+def delete_visa_application(application_id: int) -> None:
+    supabase.table("visa_applications").delete().eq("id", application_id).execute()
+
+
+# ==================== NARX TUSHISHI OBUNALARI ====================
+def create_price_alert(data: dict) -> dict:
+    """Bir xil faol obuna bo'lsa uni yangilaydi, aks holda yangisini yaratadi."""
+    existing_res = (
+        supabase.table("price_alerts")
+        .select("*")
+        .eq("telegram_user_id", data["telegram_user_id"])
+        .eq("origin", data["origin"])
+        .eq("destination", data["destination"])
+        .eq("date_from", data["date_from"])
+        .eq("date_to", data["date_to"])
+        .eq("target_price", data["target_price"])
+        .eq("is_active", True)
+        .maybe_single()
+        .execute()
+    )
+    existing = existing_res.data if existing_res else None
+    if existing:
+        update_data = {
+            "username": data.get("username"),
+            "is_active": True,
+            "last_price": None,
+            "last_checked_at": None,
+            "last_notified_at": None,
+        }
+        res = (
+            supabase.table("price_alerts")
+            .update(update_data)
+            .eq("id", existing["id"])
+            .execute()
+        )
+        return res.data[0] if res.data else {**existing, **update_data}
+
+    res = supabase.table("price_alerts").insert(data).execute()
+    return res.data[0] if res.data else data
+
+
+def get_price_alert(alert_id: int) -> dict | None:
+    res = (
+        supabase.table("price_alerts")
+        .select("*")
+        .eq("id", alert_id)
+        .maybe_single()
+        .execute()
+    )
+    return res.data if res else None
+
+
+def get_price_alerts_by_user(telegram_user_id: int, active_only: bool = False, limit: int = 50) -> list[dict]:
+    query = supabase.table("price_alerts").select("*").eq("telegram_user_id", telegram_user_id)
+    if active_only:
+        query = query.eq("is_active", True)
+    res = query.order("id", desc=True).limit(limit).execute()
+    return res.data or []
+
+
+def list_price_alerts(active_only: bool = False, limit: int = 500) -> list[dict]:
+    query = supabase.table("price_alerts").select("*")
+    if active_only:
+        query = query.eq("is_active", True)
+    res = query.order("id", desc=True).limit(limit).execute()
+    return res.data or []
+
+
+def update_price_alert(alert_id: int, data: dict) -> dict:
+    res = supabase.table("price_alerts").update(data).eq("id", alert_id).execute()
+    return res.data[0] if res.data else data
+
+
+def delete_price_alert(alert_id: int) -> None:
+    supabase.table("price_alerts").delete().eq("id", alert_id).execute()

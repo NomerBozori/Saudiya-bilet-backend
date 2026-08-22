@@ -3,6 +3,12 @@ let cachedOrders = [];
 let cbuRate = 12850;
 let pendingDelete = { type: null, id: null };
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>'"]/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
+  })[ch]);
+}
+
 // ==================== AVTOMATIK TAKLIF (SHAHARLAR) ====================
 function setupFlightAutocomplete(inputId, hiddenId, boxId) {
   const input = document.getElementById(inputId);
@@ -161,6 +167,10 @@ document.querySelectorAll(".a-tab").forEach(tab => {
       loadOrders();
     } else if (tab.dataset.tab === "all-flights") {
       loadFlights();
+    } else if (tab.dataset.tab === "visa-applications") {
+      loadVisaApplicationsAdmin();
+    } else if (tab.dataset.tab === "price-alerts") {
+      loadPriceAlertsAdmin();
     }
   });
 });
@@ -347,9 +357,15 @@ function openDeleteModal(type, id) {
   if (type === "order") {
     if (title) title.innerText = `Buyurtma #${id} o'chirilsinmi?`;
     if (desc) desc.innerText = "Buyurtma va pasport ma'lumotlari butunlay o'chiriladi. Bu amalni ortga qaytarib bo'lmaydi!";
-  } else {
+  } else if (type === "flight") {
     if (title) title.innerText = `Chipta #${id} o'chirilsinmi?`;
     if (desc) desc.innerText = "Tanlangan aviachipta butunlay o'chiriladi.";
+  } else if (type === "visa") {
+    if (title) title.innerText = `Viza arizasi #${id} o'chirilsinmi?`;
+    if (desc) desc.innerText = "Ariza va undagi shaxsiy ma'lumotlar butunlay o'chiriladi.";
+  } else if (type === "price-alert") {
+    if (title) title.innerText = `Narx obunasi #${id} o'chirilsinmi?`;
+    if (desc) desc.innerText = "Tanlangan narx obunasi butunlay o'chiriladi.";
   }
   if (modal) modal.classList.remove("hidden");
 }
@@ -369,9 +385,15 @@ if (deleteConfirmBtn) {
       if (type === "order") {
         await apiFetch(`/api/admin/orders/${id}`, { method: "DELETE" });
         loadOrders();
-      } else {
+      } else if (type === "flight") {
         await apiFetch(`/api/admin/flights/${id}`, { method: "DELETE" });
         loadFlights();
+      } else if (type === "visa") {
+        await apiFetch(`/api/admin/visa-applications/${id}`, { method: "DELETE" });
+        loadVisaApplicationsAdmin();
+      } else if (type === "price-alert") {
+        await apiFetch(`/api/admin/price-alerts/${id}`, { method: "DELETE" });
+        loadPriceAlertsAdmin();
       }
       closeDeleteModal();
     } catch (e) {
@@ -538,6 +560,143 @@ if (addFlightBtn) {
     }
   });
 }
+
+// ==================== VIZA ARIZALARI ====================
+const VISA_STATUS_LABELS = {
+  new: "🆕 Yangi",
+  processing: "⏳ Ko'rib chiqilmoqda",
+  approved: "✅ Tasdiqlangan",
+  rejected: "❌ Rad etilgan",
+};
+const VISA_TYPE_LABELS = {
+  tourist_multi: "1 yillik Multi Turistik Viza",
+  umrah_nusuk: "Rasmiy Umra Vizasi (Nusuk)",
+};
+
+async function loadVisaApplicationsAdmin() {
+  const list = document.getElementById("visa-admin-list");
+  if (!list) return;
+  const status = document.getElementById("visa-status-filter")?.value || "";
+  list.innerHTML = '<div class="a-empty">⏳ Viza arizalari yuklanmoqda...</div>';
+  try {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+    const data = await apiFetch(`/api/admin/visa-applications${qs}`);
+    renderVisaApplicationsAdmin(data.applications || []);
+  } catch (e) {
+    list.innerHTML = `<div class="a-empty error">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderVisaApplicationsAdmin(applications) {
+  const list = document.getElementById("visa-admin-list");
+  if (!list) return;
+  if (!applications.length) {
+    list.innerHTML = '<div class="a-empty"><div class="empty-icon">📑</div><p>Viza arizalari topilmadi.</p></div>';
+    return;
+  }
+  list.innerHTML = "";
+  applications.forEach(a => {
+    const card = document.createElement("article");
+    card.className = `admin-feature-card visa-${escapeHtml(a.status || "new")}`;
+    card.innerHTML = `
+      <div class="admin-feature-top">
+        <div>
+          <span class="admin-feature-id">VIZA ARIZASI #${Number(a.id) || "-"}</span>
+          <h3>${escapeHtml(a.first_name)} ${escapeHtml(a.last_name)}</h3>
+          <p>${escapeHtml(VISA_TYPE_LABELS[a.visa_type] || a.visa_type)}</p>
+        </div>
+        <span class="admin-status-pill ${escapeHtml(a.status || "new")}">${escapeHtml(VISA_STATUS_LABELS[a.status] || a.status)}</span>
+      </div>
+      <div class="admin-feature-grid">
+        <div><span>PASPORT</span><strong>${escapeHtml(a.passport_number)}</strong></div>
+        <div><span>TELEFON</span><strong>${escapeHtml(a.phone)}</strong></div>
+        <div><span>TUG'ILGAN SANA</span><strong>${escapeHtml(a.birth_date)}</strong></div>
+        <div><span>SAFAR SANASI</span><strong>${escapeHtml(a.travel_date || "Belgilanmagan")}</strong></div>
+        <div><span>TELEGRAM</span><strong>${escapeHtml(a.telegram_user_id)} ${a.username ? `(@${escapeHtml(a.username)})` : ""}</strong></div>
+        <div><span>YARATILGAN</span><strong>${escapeHtml(String(a.created_at || "").slice(0, 16).replace("T", " "))}</strong></div>
+      </div>
+      ${a.notes ? `<p class="admin-feature-note"><b>Mijoz izohi:</b> ${escapeHtml(a.notes)}</p>` : ""}
+      ${a.admin_note ? `<p class="admin-feature-note admin"><b>Admin izohi:</b> ${escapeHtml(a.admin_note)}</p>` : ""}
+      <div class="admin-feature-actions">
+        <select class="a-select visa-status-select" data-visa-id="${Number(a.id)}">
+          ${Object.entries(VISA_STATUS_LABELS).map(([key,label]) => `<option value="${key}" ${a.status===key?"selected":""}>${label}</option>`).join("")}
+        </select>
+        <button class="order-btn confirm visa-save-btn" data-visa-id="${Number(a.id)}">💾 Holatni saqlash</button>
+        <button class="order-btn delete visa-delete-btn" data-visa-id="${Number(a.id)}">🗑 O'chirish</button>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+  list.querySelectorAll(".visa-save-btn").forEach(btn => btn.addEventListener("click", () => updateVisaApplicationAdmin(Number(btn.dataset.visaId))));
+  list.querySelectorAll(".visa-delete-btn").forEach(btn => btn.addEventListener("click", () => openDeleteModal("visa", btn.dataset.visaId)));
+}
+
+async function updateVisaApplicationAdmin(id) {
+  const select = document.querySelector(`.visa-status-select[data-visa-id="${id}"]`);
+  const status = select?.value || "new";
+  const adminNote = prompt("Mijozga yuboriladigan izoh (ixtiyoriy):", "") ?? null;
+  if (adminNote === null) return;
+  try {
+    await apiFetch(`/api/admin/visa-applications/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, admin_note: adminNote || null }),
+    });
+    alert(`✅ Viza arizasi #${id} yangilandi va mijozga xabar yuborildi.`);
+    loadVisaApplicationsAdmin();
+  } catch (e) { alert("Xatolik: " + e.message); }
+}
+
+document.getElementById("refresh-visa-btn")?.addEventListener("click", loadVisaApplicationsAdmin);
+document.getElementById("visa-status-filter")?.addEventListener("change", loadVisaApplicationsAdmin);
+
+// ==================== NARX OBUNALARI ====================
+async function loadPriceAlertsAdmin() {
+  const list = document.getElementById("price-alerts-admin-list");
+  if (!list) return;
+  const activeOnly = document.getElementById("price-alert-filter")?.value === "true";
+  list.innerHTML = '<div class="a-empty">⏳ Narx obunalari yuklanmoqda...</div>';
+  try {
+    const data = await apiFetch(`/api/admin/price-alerts?active_only=${activeOnly}`);
+    renderPriceAlertsAdmin(data.alerts || []);
+  } catch (e) {
+    list.innerHTML = `<div class="a-empty error">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderPriceAlertsAdmin(alerts) {
+  const list = document.getElementById("price-alerts-admin-list");
+  if (!list) return;
+  if (!alerts.length) {
+    list.innerHTML = '<div class="a-empty"><div class="empty-icon">🔔</div><p>Narx obunalari topilmadi.</p></div>';
+    return;
+  }
+  list.innerHTML = alerts.map(a => `
+    <article class="admin-feature-card alert-${a.is_active ? "active" : "inactive"}">
+      <div class="admin-feature-top">
+        <div>
+          <span class="admin-feature-id">NARX OBUNASI #${Number(a.id)||"-"}</span>
+          <h3>✈️ ${escapeHtml(a.origin)} ➔ ${escapeHtml(a.destination)}</h3>
+          <p>${escapeHtml(a.date_from)} — ${escapeHtml(a.date_to)}</p>
+        </div>
+        <span class="admin-status-pill ${a.is_active ? "approved" : "rejected"}">${a.is_active ? "🔔 Faol" : (a.last_notified_at ? "✅ Xabar yuborilgan" : "⏹ Nofaol")}</span>
+      </div>
+      <div class="admin-feature-grid">
+        <div><span>MAQSADLI NARX</span><strong>$${Number(a.target_price).toLocaleString()}</strong></div>
+        <div><span>OXIRGI NARX</span><strong>${a.last_price == null ? "Tekshirilmagan" : `$${Number(a.last_price).toLocaleString()}`}</strong></div>
+        <div><span>TELEGRAM</span><strong>${escapeHtml(a.telegram_user_id)} ${a.username ? `(@${escapeHtml(a.username)})` : ""}</strong></div>
+        <div><span>OXIRGI TEKSHIRUV</span><strong>${escapeHtml(String(a.last_checked_at || "").slice(0,16).replace("T"," ") || "-")}</strong></div>
+      </div>
+      <div class="admin-feature-actions">
+        <button class="order-btn delete price-alert-delete-btn" data-alert-id="${Number(a.id)}">🗑 O'chirish</button>
+      </div>
+    </article>
+  `).join("");
+  list.querySelectorAll(".price-alert-delete-btn").forEach(btn => btn.addEventListener("click", () => openDeleteModal("price-alert", btn.dataset.alertId)));
+}
+
+document.getElementById("refresh-price-alerts-btn")?.addEventListener("click", loadPriceAlertsAdmin);
+document.getElementById("price-alert-filter")?.addEventListener("change", loadPriceAlertsAdmin);
+
 
 // ==================== IMAGE MODAL ====================
 function openImgModal(src) {

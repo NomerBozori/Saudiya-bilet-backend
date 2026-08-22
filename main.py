@@ -1,9 +1,15 @@
+import hashlib
+import hmac
+import html
 import io
+import json
 import logging
 import os
+import re
 import time
+from urllib.parse import parse_qsl
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 from aiogram import Bot, Dispatcher
@@ -33,8 +39,10 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("saudiya-bilet")
 
 # Joriy build versiyasi — deploy yangilanganini tekshirish uchun (/api/version)
-APP_BUILD = "v12"
+APP_BUILD = "v13"
 APP_BUILD_FEATURES = [
+    "viza arizalari va admin boshqaruvi",
+    "narx tushishi obunasi va Telegram xabari",
     "avto-post 3-35 kun",
     "top-deals avto tavsiyalar",
     "arzon narxlar taqvimi",
@@ -42,6 +50,16 @@ APP_BUILD_FEATURES = [
     "3D karta + nusxalash",
     "admin: o'chirish/tozalash/excel/CBU",
 ]
+
+VISA_TYPES = {
+    "tourist_multi": "1 yillik Multi Turistik Viza",
+    "umrah_nusuk": "Rasmiy Umra Vizasi (Nusuk)",
+}
+VISA_STATUSES = {"new", "processing", "approved", "rejected"}
+PASSPORT_RE = re.compile(r"^[A-Z0-9]{5,20}$")
+IATA_RE = re.compile(r"^[A-Z0-9]{3}$")
+MAX_ALERT_RANGE_DAYS = 60
+TELEGRAM_INIT_DATA_MAX_AGE = 24 * 60 * 60
 
 bot = Bot(token=settings.BOT_TOKEN)
 dp = Dispatcher()
@@ -99,6 +117,75 @@ def verify_admin(x_admin_password: str = Header(default="")):
     if x_admin_password != settings.ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Noto'g'ri admin parol")
     return True
+
+
+def _required_text(payload: dict, field: str, *, min_length: int = 1, max_length: int = 200) -> str:
+    value = str(payload.get(field) or "").strip()
+    if len(value) < min_length:
+        raise HTTPException(status_code=400, detail=f"'{field}' maydoni to'ldirilmagan")
+    if len(value) > max_length:
+        raise HTTPException(status_code=400, detail=f"'{field}' maydoni juda uzun")
+    return value
+
+
+def _optional_text(payload: dict, field: str, *, max_length: int = 1000) -> str | None:
+    value = str(payload.get(field) or "").strip()
+    if not value:
+        return None
+    if len(value) > max_length:
+        raise HTTPException(status_code=400, detail=f"'{field}' maydoni juda uzun")
+    return value
+
+
+def _telegram_user_id(payload: dict) -> int:
+    try:
+        user_id = int(payload.get("telegram_user_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Telegram foydalanuvchi ID noto'g'ri")
+    if user_id <= 0:
+        raise HTTPException(status_code=400, detail="Mini Appni Telegram ichidan oching")
+    return user_id
+
+
+def _verify_telegram_init_data(init_data: str, claimed_user_id: int) -> int:
+    """Telegram Mini App initData imzosini tekshiradi va ID almashtirilishini bloklaydi."""
+    if not init_data:
+        raise HTTPException(status_code=401, detail="Telegram tasdiqlash ma'lumoti yo'q")
+    try:
+        values = dict(parse_qsl(init_data, keep_blank_values=True, strict_parsing=True))
+        received_hash = values.pop("hash")
+        auth_date = int(values.get("auth_date") or 0)
+        user_data = json.loads(values.get("user") or "{}")
+        telegram_user_id = int(user_data.get("id"))
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        raise HTTPException(status_code=401, detail="Telegram tasdiqlash ma'lumoti noto'g'ri")
+
+    data_check_string = "\n".join(f"{key}={values[key]}" for key in sorted(values))
+    secret_key = hmac.new(b"WebAppData", settings.BOT_TOKEN.encode(), hashlib.sha256).digest()
+    expected_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected_hash, received_hash):
+        raise HTTPException(status_code=401, detail="Telegram imzosi noto'g'ri")
+
+    now = int(time.time())
+    if auth_date <= 0 or auth_date > now + 300 or now - auth_date > TELEGRAM_INIT_DATA_MAX_AGE:
+        raise HTTPException(status_code=401, detail="Telegram sessiyasi eskirgan, Mini Appni qayta oching")
+    if telegram_user_id != claimed_user_id:
+        raise HTTPException(status_code=403, detail="Boshqa foydalanuvchi ma'lumotiga ruxsat yo'q")
+    return telegram_user_id
+
+
+def _iso_date(value: object, field: str, *, required: bool = True) -> date | None:
+    raw = str(value or "").strip()
+    if not raw and not required:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail=f"'{field}' sanasi noto'g'ri")
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 # ==================== TELEGRAM WEBHOOK ====================
@@ -251,6 +338,252 @@ async def api_my_orders(telegram_user_id: int):
     except Exception:
         log.exception("my-orders xatolik")
         return {"orders": []}
+
+
+# ==================== VIZA ARIZALARI ====================
+@app.post("/api/visa-applications")
+async def api_create_visa_application(
+    payload: dict,
+    x_telegram_init_data: str = Header(default=""),
+):
+    user_id = _telegram_user_id(payload)
+    _verify_telegram_init_data(x_telegram_init_data, user_id)
+    visa_type = str(payload.get("visa_type") or "").strip()
+    if visa_type not in VISA_TYPES:
+        raise HTTPException(status_code=400, detail="Viza turi noto'g'ri")
+
+    first_name = _required_text(payload, "first_name", min_length=2, max_length=80).upper()
+    last_name = _required_text(payload, "last_name", min_length=2, max_length=80).upper()
+    phone = _required_text(payload, "phone", min_length=7, max_length=30)
+    passport_number = _required_text(payload, "passport_number", min_length=5, max_length=20).upper()
+    if not PASSPORT_RE.fullmatch(passport_number):
+        raise HTTPException(status_code=400, detail="Pasport raqami faqat lotin harflari va raqamlardan iborat bo'lsin")
+
+    birth_date = _iso_date(payload.get("birth_date"), "birth_date")
+    travel_date = _iso_date(payload.get("travel_date"), "travel_date", required=False)
+    if birth_date >= date.today():
+        raise HTTPException(status_code=400, detail="Tug'ilgan sana noto'g'ri")
+    if travel_date and travel_date < date.today():
+        raise HTTPException(status_code=400, detail="Safar sanasi o'tgan bo'lishi mumkin emas")
+
+    application = db.create_visa_application({
+        "telegram_user_id": user_id,
+        "username": _optional_text(payload, "username", max_length=64),
+        "visa_type": visa_type,
+        "first_name": first_name,
+        "last_name": last_name,
+        "phone": phone,
+        "passport_number": passport_number,
+        "birth_date": birth_date.isoformat(),
+        "travel_date": travel_date.isoformat() if travel_date else None,
+        "notes": _optional_text(payload, "notes", max_length=1000),
+        "status": "new",
+    })
+    application_id = application.get("id")
+
+    safe_name = html.escape(f"{first_name} {last_name}")
+    safe_phone = html.escape(phone)
+    safe_passport = html.escape(passport_number)
+    visa_label = html.escape(VISA_TYPES[visa_type])
+    text = (
+        f"📑 <b>Yangi viza arizasi #{application_id or '-'}</b>\n\n"
+        f"🕋 Turi: <b>{visa_label}</b>\n"
+        f"👤 Arizachi: {safe_name}\n"
+        f"📞 Telefon: {safe_phone}\n"
+        f"🛂 Pasport: <code>{safe_passport}</code>\n"
+        f"📅 Rejalashtirilgan safar: {travel_date.isoformat() if travel_date else '-'}\n"
+        f"💬 Telegram ID: <code>{user_id}</code>\n\n"
+        "Arizani Admin paneldagi «Viza arizalari» bo'limida boshqaring."
+    )
+    try:
+        await bot.send_message(settings.ADMIN_CHAT_ID, text, parse_mode="HTML")
+    except Exception as e:
+        log.warning(f"Yangi viza arizasi haqida xabar yuborilmadi: {e}")
+
+    return {"application_id": application_id, "application": application}
+
+
+@app.get("/api/visa-applications")
+async def api_my_visa_applications(
+    telegram_user_id: int,
+    x_telegram_init_data: str = Header(default=""),
+):
+    if telegram_user_id <= 0:
+        raise HTTPException(status_code=400, detail="Telegram foydalanuvchi ID noto'g'ri")
+    _verify_telegram_init_data(x_telegram_init_data, telegram_user_id)
+    return {"applications": db.get_visa_applications_by_user(telegram_user_id)}
+
+
+# ==================== NARX TUSHGANDA OBUNA ====================
+@app.post("/api/price-alerts")
+async def api_create_price_alert(
+    payload: dict,
+    x_telegram_init_data: str = Header(default=""),
+):
+    user_id = _telegram_user_id(payload)
+    _verify_telegram_init_data(x_telegram_init_data, user_id)
+    origin = tp.to_iata(_required_text(payload, "origin", max_length=80)).upper()
+    destination = tp.to_iata(_required_text(payload, "destination", max_length=80)).upper()
+    if not IATA_RE.fullmatch(origin) or not IATA_RE.fullmatch(destination):
+        raise HTTPException(status_code=400, detail="Aeroport kodi noto'g'ri")
+    if origin == destination:
+        raise HTTPException(status_code=400, detail="Jo'nash va borish aeroporti bir xil bo'lishi mumkin emas")
+
+    date_from = _iso_date(payload.get("date_from"), "date_from")
+    date_to = _iso_date(payload.get("date_to"), "date_to")
+    if date_from < date.today():
+        raise HTTPException(status_code=400, detail="Obuna boshlanish sanasi o'tgan bo'lishi mumkin emas")
+    if date_to < date_from:
+        raise HTTPException(status_code=400, detail="Obuna tugash sanasi boshlanish sanasidan oldin")
+    if (date_to - date_from).days >= MAX_ALERT_RANGE_DAYS:
+        raise HTTPException(status_code=400, detail=f"Obuna oralig'i ko'pi bilan {MAX_ALERT_RANGE_DAYS} kun")
+
+    try:
+        target_price = round(float(payload.get("target_price")), 2)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Maqsadli narx noto'g'ri")
+    if target_price <= 0 or target_price > 100000:
+        raise HTTPException(status_code=400, detail="Maqsadli narx musbat son bo'lishi kerak")
+
+    alert = db.create_price_alert({
+        "telegram_user_id": user_id,
+        "username": _optional_text(payload, "username", max_length=64),
+        "origin": origin,
+        "destination": destination,
+        "date_from": date_from.isoformat(),
+        "date_to": date_to.isoformat(),
+        "target_price": target_price,
+        "is_active": True,
+    })
+    return {"alert_id": alert.get("id"), "alert": alert}
+
+
+@app.get("/api/price-alerts")
+async def api_my_price_alerts(
+    telegram_user_id: int,
+    active_only: bool = False,
+    x_telegram_init_data: str = Header(default=""),
+):
+    if telegram_user_id <= 0:
+        raise HTTPException(status_code=400, detail="Telegram foydalanuvchi ID noto'g'ri")
+    _verify_telegram_init_data(x_telegram_init_data, telegram_user_id)
+    return {"alerts": db.get_price_alerts_by_user(telegram_user_id, active_only=active_only)}
+
+
+@app.delete("/api/price-alerts/{alert_id}")
+async def api_cancel_price_alert(
+    alert_id: int,
+    telegram_user_id: int,
+    x_telegram_init_data: str = Header(default=""),
+):
+    _verify_telegram_init_data(x_telegram_init_data, telegram_user_id)
+    alert = db.get_price_alert(alert_id)
+    if not alert or int(alert.get("telegram_user_id") or 0) != telegram_user_id:
+        raise HTTPException(status_code=404, detail="Obuna topilmadi")
+    db.update_price_alert(alert_id, {"is_active": False})
+    return {"ok": True, "alert_id": alert_id}
+
+
+async def _best_price_for_alert(alert: dict) -> dict | None:
+    """Faqat API yoki admin kiritgan haqiqiy narxlardan eng arzonini topadi.
+
+    Taqvimdagi deterministik `estimate` qiymatlar obuna xabarini ishga tushirmaydi.
+    """
+    start = _iso_date(alert.get("date_from"), "date_from")
+    end = _iso_date(alert.get("date_to"), "date_to")
+    days = min(MAX_ALERT_RANGE_DAYS, (end - start).days + 1)
+    origin = str(alert.get("origin") or "").upper()
+    destination = str(alert.get("destination") or "").upper()
+
+    candidates: list[dict] = []
+    calendar = await tp.get_calendar_prices(origin, destination, start.isoformat(), days)
+    for item in calendar:
+        if item.get("source") not in {"api", "manual"} or item.get("price") is None:
+            continue
+        candidates.append({
+            "price": float(item["price"]),
+            "date": item.get("date"),
+            "source": item.get("source"),
+            "airline": item.get("airline") or "",
+        })
+
+    try:
+        manual = db.list_manual_flights(origin, destination, None)
+    except Exception:
+        manual = []
+    for item in manual:
+        depart = _iso_date(item.get("depart_date"), "depart_date", required=False)
+        if not depart or depart < start or depart > end or item.get("price") is None:
+            continue
+        try:
+            price = float(item["price"])
+        except (TypeError, ValueError):
+            continue
+        candidates.append({
+            "price": price,
+            "date": depart.isoformat(),
+            "source": "manual",
+            "airline": item.get("airline") or "Saudiya Biletlar",
+        })
+
+    return min(candidates, key=lambda item: item["price"]) if candidates else None
+
+
+@app.post("/api/cron/price-alerts")
+@app.get("/api/cron/price-alerts")
+async def api_check_price_alerts(secret: str = "", limit: int = 100):
+    """Faol obunalarni tekshiradi va shart bajarilganda Telegram xabari yuboradi."""
+    if secret != settings.CRON_SECRET:
+        raise HTTPException(status_code=403, detail="Ruxsat yo'q")
+
+    alerts = db.list_price_alerts(active_only=True, limit=max(1, min(int(limit or 100), 200)))
+    checked = matched = notified = 0
+    errors: list[dict] = []
+    now_iso = _utc_now_iso()
+
+    for alert in alerts:
+        alert_id = alert.get("id")
+        checked += 1
+        try:
+            best = await _best_price_for_alert(alert)
+            update_data: dict = {"last_checked_at": now_iso}
+            if best:
+                update_data["last_price"] = round(float(best["price"]), 2)
+
+            if not best or float(best["price"]) > float(alert.get("target_price") or 0):
+                db.update_price_alert(alert_id, update_data)
+                continue
+
+            matched += 1
+            origin = html.escape(str(alert.get("origin") or ""))
+            destination = html.escape(str(alert.get("destination") or ""))
+            depart_date = html.escape(str(best.get("date") or ""))
+            airline = html.escape(str(best.get("airline") or "Aviakompaniya"))
+            price = round(float(best["price"]), 2)
+            target = round(float(alert.get("target_price") or 0), 2)
+            message = (
+                "🔔 <b>Narx tushdi!</b>\n\n"
+                f"✈️ <b>{origin} ➔ {destination}</b>\n"
+                f"📅 Sana: <b>{depart_date}</b>\n"
+                f"🛫 {airline}\n"
+                f"💵 Hozirgi narx: <b>${price:g}</b>\n"
+                f"🎯 Siz belgilagan narx: ${target:g}\n\n"
+                "Taklifni o'tkazib yubormaslik uchun Mini Appga kirib band qiling."
+            )
+            await bot.send_message(int(alert["telegram_user_id"]), message, parse_mode="HTML")
+            update_data.update({"last_notified_at": now_iso, "is_active": False})
+            db.update_price_alert(alert_id, update_data)
+            notified += 1
+        except Exception as e:
+            log.exception(f"Narx obunasini tekshirishda xatolik #{alert_id}")
+            errors.append({"alert_id": alert_id, "error": str(e)[:200]})
+
+    return {
+        "checked": checked,
+        "matched": matched,
+        "notified": notified,
+        "errors": errors,
+    }
 
 
 # ==================== MARKAZIY BANK (CBU) JONLI KURSI ====================
@@ -533,6 +866,68 @@ async def api_daily_post(
 async def admin_list_orders(status: str | None = None):
     orders = db.get_orders_with_passport(status=status)
     return {"orders": orders}
+
+
+@app.get("/api/admin/visa-applications", dependencies=[Depends(verify_admin)])
+async def admin_list_visa_applications(status: str | None = None):
+    if status and status not in VISA_STATUSES:
+        raise HTTPException(status_code=400, detail="Viza arizasi holati noto'g'ri")
+    return {"applications": db.list_visa_applications(status=status)}
+
+
+@app.patch("/api/admin/visa-applications/{application_id}", dependencies=[Depends(verify_admin)])
+async def admin_update_visa_application(application_id: int, payload: dict):
+    application = db.get_visa_application(application_id)
+    if not application:
+        raise HTTPException(status_code=404, detail="Viza arizasi topilmadi")
+
+    status = str(payload.get("status") or "").strip()
+    if status not in VISA_STATUSES:
+        raise HTTPException(status_code=400, detail="Viza arizasi holati noto'g'ri")
+    admin_note = _optional_text(payload, "admin_note", max_length=1000)
+    updated = db.update_visa_application(application_id, {
+        "status": status,
+        "admin_note": admin_note,
+    })
+
+    status_labels = {
+        "new": "Yangi",
+        "processing": "Ko'rib chiqilmoqda",
+        "approved": "Tasdiqlandi",
+        "rejected": "Rad etildi",
+    }
+    try:
+        note_line = f"\n📝 Izoh: {html.escape(admin_note)}" if admin_note else ""
+        await bot.send_message(
+            int(application["telegram_user_id"]),
+            (
+                f"📑 <b>Viza arizasi #{application_id} yangilandi</b>\n\n"
+                f"Holati: <b>{html.escape(status_labels[status])}</b>"
+                f"{note_line}"
+            ),
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        log.warning(f"Viza holati haqida mijozga xabar yuborilmadi: {e}")
+
+    return {"application": updated}
+
+
+@app.delete("/api/admin/visa-applications/{application_id}", dependencies=[Depends(verify_admin)])
+async def admin_delete_visa_application(application_id: int):
+    db.delete_visa_application(application_id)
+    return {"ok": True, "deleted_id": application_id}
+
+
+@app.get("/api/admin/price-alerts", dependencies=[Depends(verify_admin)])
+async def admin_list_price_alerts(active_only: bool = False):
+    return {"alerts": db.list_price_alerts(active_only=active_only)}
+
+
+@app.delete("/api/admin/price-alerts/{alert_id}", dependencies=[Depends(verify_admin)])
+async def admin_delete_price_alert(alert_id: int):
+    db.delete_price_alert(alert_id)
+    return {"ok": True, "deleted_id": alert_id}
 
 
 def _generate_excel_bytes(orders: list[dict], as_csv: bool = False) -> bytes:

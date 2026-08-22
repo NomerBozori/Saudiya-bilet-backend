@@ -824,3 +824,43 @@ body {
   color: var(--text-muted, #64748B);
   margin-top: 2px;
 }
+
+/* ==================== v7: VIZA VA NARX OBUNALARI ==================== */
+.admin-feature-card {
+  padding: 18px;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid #E2E8F0;
+  border-left: 5px solid #D4AF37;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, .055);
+}
+.admin-feature-card.visa-processing { border-left-color:#F59E0B; }
+.admin-feature-card.visa-approved,
+.admin-feature-card.alert-active { border-left-color:#16A34A; }
+.admin-feature-card.visa-rejected,
+.admin-feature-card.alert-inactive { border-left-color:#DC2626; opacity:.78; }
+.admin-feature-top { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; }
+.admin-feature-id { display:block; margin-bottom:5px; color:#64748B; font-size:9px; font-weight:800; letter-spacing:.8px; }
+.admin-feature-top h3 { margin:0; color:#0F172A; font-size:17px; font-weight:800; }
+.admin-feature-top p { margin:4px 0 0; color:#64748B; font-size:12px; }
+.admin-status-pill { padding:6px 10px; border-radius:999px; background:#F1F5F9; color:#475569; font-size:10px; font-weight:800; white-space:nowrap; }
+.admin-status-pill.processing { background:#FEF3C7; color:#92400E; }
+.admin-status-pill.approved { background:#DCFCE7; color:#166534; }
+.admin-status-pill.rejected { background:#FEE2E2; color:#991B1B; }
+.admin-feature-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:15px; }
+.admin-feature-grid > div { padding:10px; border-radius:10px; background:#F8FAFC; }
+.admin-feature-grid span { display:block; margin-bottom:4px; color:#94A3B8; font-size:8.5px; font-weight:800; letter-spacing:.5px; }
+.admin-feature-grid strong { color:#334155; font-size:11.5px; word-break:break-word; }
+.admin-feature-note { margin:11px 0 0; padding:10px; border-radius:10px; background:#F8FAFC; color:#475569; font-size:11.5px; line-height:1.45; }
+.admin-feature-note.admin { background:#FEF3C7; color:#713F12; }
+.admin-feature-actions { display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-top:14px; flex-wrap:wrap; }
+.admin-feature-actions .a-select { width:auto; min-width:190px; margin:0; }
+.a-empty.error { color:#B91C1C; }
+
+@media (max-width: 760px) {
+  .admin-feature-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .admin-feature-top { flex-direction:column; }
+  .admin-feature-actions { justify-content:stretch; }
+  .admin-feature-actions .a-select,
+  .admin-feature-actions button { width:100%; }
+}

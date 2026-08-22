@@ -7,6 +7,27 @@ Telegram Mini App (statik frontend) va admin boshqaruv paneli.
 
 ## ✨ Asosiy funksiyalar
 
+### 0A. Viza arizalari
+Mini Appdagi **Viza** bo'limidan 1 yillik Multi Turistik yoki Nusuk Umra vizasi uchun
+ariza yuboriladi. Ariza Supabase'da saqlanadi va admin Telegram guruhiga xabar boradi.
+
+- Mijoz o'z arizalari va ularning `new / processing / approved / rejected` holatini ko'radi
+- Admin panelda arizalarni filtrlash, holat/izohni yangilash va o'chirish mumkin
+- Holat yangilanganda mijozga Telegram orqali avtomatik xabar yuboriladi
+- Pasport raqami, sanalar va maydon uzunliklari backendda tekshiriladi
+- Shaxsiy endpointlar Telegram `initData` HMAC imzosi bilan himoyalangan; boshqa user ID bilan o'qib bo'lmaydi
+
+### 0B. Narx tushganda obuna bo'lish
+Mijoz yo'nalish, 60 kungacha sana oralig'i va maqsadli USD narxini belgilaydi.
+`/api/cron/price-alerts` faol obunalarni tekshiradi. Faqat Travelpayouts API yoki admin
+kiritgan tasdiqlangan narx maqsadga tushsa Telegram xabari yuboriladi; taxminiy
+(`estimate`) narxlar hech qachon xabarni ishga tushirmaydi.
+
+- Bir martalik xabardan so'ng obuna avtomatik nofaol qilinadi
+- Mijoz obunalarini ko'rishi va bekor qilishi mumkin
+- Admin panelda barcha/faol obunalarni ko'rish va o'chirish mumkin
+- Oxirgi tekshirilgan narx va vaqt saqlanadi
+
 ### 1. Avto-post sanalari — faqat yaqin 3–35 kun
 Kanalga chiqadigan kunlik post endi **faqat bugundan 3 kundan 35 kungacha** bo'lgan reyslarni ko'rsatadi.
 Uzoq dekabr/yanvar sanalari umuman tushmaydi.
@@ -48,7 +69,7 @@ GET /api/top-deals?limit=8[&refresh=true]
 
 ### 3C. Keshni o'chirish (eski dizayn muammosi)
 Telegram Mini App statik fayllarni uzoq keshlaydi va foydalanuvchi eski dizaynni ko'rib qolardi.
-Endi `.html/.js/.css` uchun `Cache-Control: no-store` qaytariladi + asset versiyalari (`?v=12`)
+Endi `.html/.js/.css` uchun `Cache-Control: no-store` qaytariladi + asset versiyalari (`?v=13`)
 yangilandi — ilova har doim eng so'nggi versiyani yuklaydi.
 
 ### 4. Telegram admin 1-click inline tugmalari
@@ -86,6 +107,10 @@ StaticFiles mountdan oldin e'lon qilingan `307` redirect — panel har doim ochi
 | `GET` | `/api/calendar` | Arzon narxlar taqvimi |
 | `GET` | `/api/top-deals` | 🔥 Avto narx tavsiyalari (eng arzon takliflar) |
 | `GET` | `/api/cbu-rate` | Markaziy Bank USD kursi |
+| `POST/GET` | `/api/visa-applications` | Viza arizasini yuborish / mijoz arizalari |
+| `POST/GET` | `/api/price-alerts` | Narx obunasini yaratish / mijoz obunalari |
+| `DELETE` | `/api/price-alerts/{id}` | Mijozning narx obunasini bekor qilish |
+| `GET/POST` | `/api/cron/price-alerts` | Faol narx obunalarini tekshirish va Telegram xabari |
 | `POST` | `/api/orders` | Buyurtma yaratish (adminga inline tugmali xabar) |
 | `POST` | `/api/orders/{id}/payment` | To'lov chekini yuklash |
 | `GET` | `/api/my-orders` | Mijoz buyurtmalari tarixi |
@@ -97,11 +122,26 @@ StaticFiles mountdan oldin e'lon qilingan `307` redirect — panel har doim ochi
 | `POST` | `/api/admin/orders/{id}/reject` | Rad etish |
 | `POST` | `/api/admin/orders/clear-rejected` | Rad etilganlarni tozalash |
 | `DELETE` | `/api/admin/orders/{id}` | Buyurtmani o'chirish |
+| `GET/PATCH/DELETE` | `/api/admin/visa-applications` | Viza arizalarini boshqarish |
+| `GET/DELETE` | `/api/admin/price-alerts` | Narx obunalarini boshqarish |
 | `GET/POST/DELETE` | `/api/admin/flights` | Qo'lda chipta qo'shish/o'chirish |
 
 Admin endpointlari `X-Admin-Password` sarlavhasini talab qiladi.
 
 ---
+
+## 🗄 Supabase migratsiyasi
+
+Yangi funksiyalarni deploy qilishdan oldin Supabase Dashboard → **SQL Editor** orqali
+quyidagi faylni bir marta ishga tushiring:
+
+```text
+migrations/20260822_visa_and_price_alerts.sql
+```
+
+Migratsiya `visa_applications` va `price_alerts` jadvallarini, indekslar, cheklovlar,
+`updated_at` triggerlari va RLS himoyasini yaratadi. Backend `service_role` kaliti bilan ishlaydi;
+ushbu kalitni frontendga joylamang.
 
 ## 🚀 Ishga tushirish
 
@@ -115,9 +155,13 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 - Mini App: `http://localhost:8000/`
 - Admin panel: `http://localhost:8000/admin` (avtomatik `/admin/` ga o'tadi)
 
-### Kunlik avto-post (cron)
-```
+### Cron vazifalari
+```bash
+# Kunlik kanal posti
 curl -X POST "https://<domen>/api/cron/daily-post?secret=$CRON_SECRET"
+
+# Narx obunalarini tekshirish (tavsiya: har 30–60 daqiqada)
+curl -X POST "https://<domen>/api/cron/price-alerts?secret=$CRON_SECRET"
 ```
 
 ## 🧪 Testlar
