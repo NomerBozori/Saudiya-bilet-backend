@@ -942,14 +942,6 @@ function showVisaFormMessage(message, isError=false){
   el.classList.add(isError?"error":"success");
 }
 
-document.querySelectorAll(".visa-choose-btn").forEach(btn=>{
-  btn.addEventListener("click",()=>{
-    const select=document.getElementById("visa-type");
-    if(select) select.value=btn.dataset.visaType;
-    document.getElementById("visa-form-card")?.scrollIntoView({behavior:"smooth", block:"start"});
-  });
-});
-
 function renderVisaApplications(applications){
   const list=document.getElementById("visa-applications-list");
   if(!list) return;
