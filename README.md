@@ -7,24 +7,24 @@ Telegram Mini App (statik frontend) va admin boshqaruv paneli.
 
 ## ✨ Asosiy funksiyalar
 
-### 0A. Viza arizalari
-Mini Appdagi **Viza** bo'limidan 1 yillik Multi Turistik yoki Nusuk Umra vizasi uchun
-ariza yuboriladi. Ariza Supabase'da saqlanadi va admin Telegram guruhiga xabar boradi.
+### 0A. Viza xizmatlari
+Mini Appdagi **Viza** bo'limi ixcham ko'rinishda: faqat 2 ta viza kartochkasi va operatorga olib boradigan
+**✍️ Ariza topshirish (@nuriddinovdfg)** tugmalari ko'rsatiladi. Uzun ariza formasi va mijoz tarixi Mini Appdan olib tashlangan.
 
-- Mijoz o'z arizalari va ularning `new / processing / approved / rejected` holatini ko'radi
+- 1 yillik Multi Turistik va Rasmiy Umra (Nusuk) vizasi uchun alohida kartochka
+- Tugma to'g'ridan-to'g'ri `@nuriddinovdfg` operatoriga ochiladi
+- Viza arizalari uchun backend va admin endpointlari alohida integratsiya sifatida saqlangan
 - Admin panelda arizalarni filtrlash, holat/izohni yangilash va o'chirish mumkin
 - Holat yangilanganda mijozga Telegram orqali avtomatik xabar yuboriladi
-- Pasport raqami, sanalar va maydon uzunliklari backendda tekshiriladi
-- Shaxsiy endpointlar Telegram `initData` HMAC imzosi bilan himoyalangan; boshqa user ID bilan o'qib bo'lmaydi
 
 ### 0B. Narx tushganda obuna bo'lish
-Mijoz yo'nalish, 60 kungacha sana oralig'i va maqsadli USD narxini belgilaydi.
-`/api/cron/price-alerts` faol obunalarni tekshiradi. Faqat Travelpayouts API yoki admin
-kiritgan tasdiqlangan narx maqsadga tushsa Telegram xabari yuboriladi; taxminiy
-(`estimate`) narxlar hech qachon xabarni ishga tushirmaydi.
+Narx ogohlantirish backend va cron integratsiyasi sifatida ishlaydi: `/api/cron/price-alerts` faol
+obunalarni tekshiradi. Qidiruv ekrani esa ixcham saqlangan — katta obuna formasi Mini Appdan olib tashlangan.
+Faqat Travelpayouts API yoki admin kiritgan tasdiqlangan narx maqsadga tushsa Telegram xabari yuboriladi;
+taxminiy (`estimate`) narxlar hech qachon xabarni ishga tushirmaydi.
 
 - Bir martalik xabardan so'ng obuna avtomatik nofaol qilinadi
-- Mijoz obunalarini ko'rishi va bekor qilishi mumkin
+- Bot yoki tashqi integratsiya orqali mijoz obunasini ko'rish va bekor qilish mumkin
 - Admin panelda barcha/faol obunalarni ko'rish va o'chirish mumkin
 - Oxirgi tekshirilgan narx va vaqt saqlanadi
 
@@ -38,7 +38,7 @@ Uzoq dekabr/yanvar sanalari umuman tushmaydi.
   oyma-oy so'raladi, so'ng qat'iy filtrlanadi; API bo'sh qaytarsa `prices/latest` (v2) zaxira sifatida
   ishlatiladi va u ham filtrdan o'tadi
 - Post matnida sana o'zbekcha ko'rinishda: `24.08.2026 (Dushanba) — 3 kundan keyin`
-- Oynani so'rovda o'zgartirish mumkin: `/api/cron/daily-post?secret=...&min_days=3&max_days=35`
+- Cron so'rovi qanday parametr yuborilishidan qat'i nazar post oynasi 3–35 kun bilan cheklanadi
 
 ### 2. O'zbekistonning 11 ta aeroporti — aralash reyslar
 `TAS, NMA, SKD, FEG, BHK, AZN, UGC, TMJ, NVI, KSQ, NCU` → `JED` va `MED`.
@@ -69,7 +69,7 @@ GET /api/top-deals?limit=8[&refresh=true]
 
 ### 3C. Keshni o'chirish (eski dizayn muammosi)
 Telegram Mini App statik fayllarni uzoq keshlaydi va foydalanuvchi eski dizaynni ko'rib qolardi.
-Endi `.html/.js/.css` uchun `Cache-Control: no-store` qaytariladi + asset versiyalari (`?v=13`)
+Endi `.html/.js/.css` uchun `Cache-Control: no-store` qaytariladi + asset versiyalari (`?v=14`)
 yangilandi — ilova har doim eng so'nggi versiyani yuklaydi.
 
 ### 4. Telegram admin 1-click inline tugmalari

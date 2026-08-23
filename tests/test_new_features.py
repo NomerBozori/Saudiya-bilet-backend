@@ -168,6 +168,20 @@ async def test_daily_post_excludes_far_dates():
 
 
 @pytest.mark.asyncio
+async def test_daily_post_cannot_widen_date_window():
+    """Cron parametrlaridagi xato qiymatlar ham 3–35 kunlik chegaradan chiqmaydi."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        with patch("travelpayouts.get_daily_cheapest", new=AsyncMock(return_value=[])), \
+             patch("main.get_cbu_usd_rate", new=AsyncMock(return_value={"rate": 12500.0})), \
+             patch("main.bot.send_message", new_callable=AsyncMock):
+            res = await ac.post("/api/cron/daily-post?secret=testcron&min_days=0&max_days=999")
+
+    assert res.status_code == 200
+    assert res.json()["window"] == {"min_days": 3, "max_days": 35}
+
+
+@pytest.mark.asyncio
 async def test_get_daily_cheapest_filters_api_dates():
     soon = (date.today() + timedelta(days=9)).isoformat()
     far = (date.today() + timedelta(days=200)).isoformat()
@@ -405,7 +419,7 @@ async def test_admin_panel_contains_new_controls():
         js = (await ac.get("/admin/admin.js")).text
     assert 'id="clear-rejected-btn"' in html
     assert "🗑 Rad etilganlarni tozalash" in html
-    assert "📊 Excel (CSV) Yuklab Olish" in html
+    assert "📊 Excel Yuklab Olish" in html
     assert 'id="cbu-rate-value"' in html
     assert "loadCbuRate" in js
     assert "clear-rejected" in js
