@@ -6,17 +6,19 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
 from urllib.parse import parse_qsl
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
+from collections import defaultdict
 
 import httpx
 from aiogram import Bot, Dispatcher
 from aiogram.types import BufferedInputFile, Update
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 import database as db
@@ -37,6 +39,95 @@ except ImportError:
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("saudiya-bilet")
+
+# ==================== XAVFSIZLIK: BRUTE-FORCE HIMOYASI ====================
+# Admin loginga qiladigan urinishlarni cheklaydi (5 ta urinish, 15 daqiqa blokirovka)
+_brute_force_store: dict[str, dict] = defaultdict(lambda: {"attempts": 0, "locked_until": 0.0})
+BRUTE_FORCE_MAX_ATTEMPTS = 5
+BRUTE_FORCE_LOCKOUT_SECONDS = 15 * 60  # 15 daqiqa
+
+
+def _check_brute_force(ip: str) -> bool:
+    """True qaytaradi agar IP bloklangan bo'lsa."""
+    now = time.time()
+    entry = _brute_force_store.get(ip)
+    if entry["locked_until"] > now:
+        return True
+    if entry["attempts"] >= BRUTE_FORCE_MAX_ATTEMPTS:
+        entry["locked_until"] = now + BRUTE_FORCE_LOCKOUT_SECONDS
+        entry["attempts"] = 0
+        log.warning(f"Brute-force hujumi bloklandi: {ip}")
+        return True
+    return False
+
+
+def _record_failed_attempt(ip: str) -> None:
+    """Muvaffaqatsiz urinishni qayd etadi."""
+    entry = _brute_force_store[ip]
+    entry["attempts"] += 1
+    if entry["attempts"] >= BRUTE_FORCE_MAX_ATTEMPTS:
+        entry["locked_until"] = time.time() + BRUTE_FORCE_LOCKOUT_SECONDS
+        log.warning(f"Brute-force hujumi bloklandi: {ip} - {BRUTE_FORCE_MAX_ATTEMPTS} urinish")
+    else:
+        remaining = BRUTE_FORCE_MAX_ATTEMPTS - entry["attempts"]
+        log.info(f"Admin login muvaffaqatsiz: {ip} - {remaining} urinish qoldi")
+
+
+def _clear_brute_force(ip: str) -> None:
+    """Muvaffaqatli kirgandan so'ng cheklovlarni olib tashlaydi."""
+    if ip in _brute_force_store:
+        del _brute_force_store[ip]
+
+
+def _get_client_ip(request: Request) -> str:
+    """Mijoz IP manzilini olish (X-Forwarded-For yoki client.host)."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+# ==================== XAVFSIZLIK: FAYL TURINI TEKSHIRISH ====================
+ALLOWED_PAYMENT_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "application/pdf",
+}
+ALLOWED_PAYMENT_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf"}
+MAX_PAYMENT_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+def _validate_payment_file(filename: str, content: bytes, content_type: str) -> None:
+    """To'lov cheki faylini tekshiradi: tur, hajim, path traversal."""
+    # 1. Hajim tekshirish
+    if len(content) > MAX_PAYMENT_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Fayl hajmi juda katta. Maksimal {MAX_PAYMENT_FILE_SIZE // (1024*1024)} MB ruxsat etiladi."
+        )
+
+    # 2. Fayl nomi path traversal himoyasi
+    safe_name = os.path.basename(filename)
+    if not safe_name or safe_name != filename or "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Fayl nomi noto'g'ri")
+
+    # 3. Kengaytma tekshirish
+    ext = os.path.splitext(safe_name)[1].lower()
+    if ext not in ALLOWED_PAYMENT_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ruxsat etilgan fayl turlari: {', '.join(sorted(ALLOWED_PAYMENT_EXTENSIONS))}"
+        )
+
+    # 4. Content-Type tekshirish (xavfsizlik uchun)
+    safe_ct = (content_type or "").split(";")[0].strip().lower()
+    if safe_ct and safe_ct not in ALLOWED_PAYMENT_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ruxsat etilgan fayl turlari: {', '.join(sorted(ALLOWED_PAYMENT_CONTENT_TYPES))}"
+        )
 
 # Joriy build versiyasi — deploy yangilanganini tekshirish uchun (/api/version)
 APP_BUILD = "v14"
@@ -85,6 +176,33 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Saudiya Biletlar API", lifespan=lifespan)
+
+# ==================== XAVFSIZLIK HEADERS ====================
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    # XSS himoyasi
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Content Security Policy - XSS hujumlarini bloklaydi
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://telegram.org https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: https: blob:; "
+        "connect-src 'self' https://api.travelpayouts.com https://cbu.uz https://autocomplete.travelpayouts.com https://www.aviasales.com; "
+        "frame-ancestors 'none';"
+    )
+    # Cache control for sensitive pages
+    path = request.url.path.lower()
+    if path.startswith("/api/") or path in ("/admin", "/admin/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -302,24 +420,43 @@ async def api_create_order(payload: dict):
 # ==================== TO'LOV CHEKI ====================
 @app.post("/api/orders/{order_id}/payment")
 async def api_upload_payment(order_id: int, file: UploadFile = File(...)):
+    """To'lov cheki yuklash - fayl turi va hajim xavfsizligi bilan."""
     order = db.get_order(order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Buyurtma topilmadi")
 
     content = await file.read()
-    filename = file.filename or "receipt.jpg"
-    url = db.upload_file("payments", f"{order_id}_{filename}", content, file.content_type or "image/jpeg")
+    filename = html.escape(str(file.filename or "receipt.jpg"))
+    
+    # Xavfsizlik: fayl turi va hajmini tekshirish
+    try:
+        _validate_payment_file(filename, content, file.content_type or "")
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.warning(f"Fayl tekshirishda xatolik: {e}")
+        raise HTTPException(status_code=400, detail="Fayl noto'g'ri")
+    
+    # Xavfsiz filename - path traversal himoyasi
+    safe_filename = os.path.basename(filename)
+    storage_path = f"{order_id}_{safe_filename}"
+    
+    url = db.upload_file("payments", storage_path, content, file.content_type or "image/jpeg")
     db.update_order(order_id, {"payment_screenshot_url": url, "status": "awaiting_confirmation"})
 
     try:
-        photo = BufferedInputFile(content, filename=filename)
+        photo = BufferedInputFile(content, filename=safe_filename)
+        safe_origin = html.escape(str(order.get('origin') or '').upper())
+        safe_dest = html.escape(str(order.get('destination') or '').upper())
+        safe_date = html.escape(str(order.get('depart_date') or '-'))
+        safe_price = html.escape(str(order.get('price', '-')))
         await bot.send_photo(
             settings.ADMIN_CHAT_ID,
             photo,
             caption=(
                 f"💳 <b>To'lov cheki — buyurtma #{order_id}</b>\n\n"
-                f"✈️ {(order.get('origin') or '').upper()} ➔ {(order.get('destination') or '').upper()}\n"
-                f"🗓 {order.get('depart_date') or '-'} | 💵 <b>${order.get('price', '-')}</b>\n\n"
+                f"✈️ {safe_origin} ➔ {safe_dest}\n"
+                f"🗓 {safe_date} | 💵 <b>${safe_price}</b>\n\n"
                 f"👇 1 bosishda tasdiqlang yoki rad eting:"
             ),
             parse_mode="HTML",
@@ -1132,13 +1269,24 @@ async def admin_clear_rejected_orders():
 
 @app.delete("/api/admin/orders/{order_id}", dependencies=[Depends(verify_admin)])
 async def admin_delete_order(order_id: int):
-    """Oxirgi o'chirish tugmasi – buyurtmani to'liq o'chirish."""
+    """[🗑 O'chirish] - buyurtmani to'liq o'chirish."""
     try:
         db.delete_order(order_id)
         return {"ok": True, "deleted_id": order_id}
     except Exception as e:
         log.exception(f"Buyurtmani o'chirishda xatolik #{order_id}")
         raise HTTPException(status_code=500, detail=f"O'chirishda xatolik: {e}")
+
+
+@app.delete("/api/admin/orders", dependencies=[Depends(verify_admin)])
+async def admin_delete_all_orders(payload: dict = None):
+    """[🗑 Barcha Buyurtmalarni O'chirish] - barcha buyurtmalarni o'chirish."""
+    try:
+        deleted = db.delete_all_orders()
+        return {"ok": True, "deleted": deleted}
+    except Exception as e:
+        log.exception("Barcha buyurtmalarni o'chirishda xatolik")
+        raise HTTPException(status_code=500, detail=f"Tozalashda xatolik: {e}")
 
 
 @app.get("/api/admin/flights", dependencies=[Depends(verify_admin)])
@@ -1190,9 +1338,35 @@ async def admin_delete_flight(flight_id: int):
 
 
 @app.post("/api/admin/login")
-async def admin_login(payload: dict):
-    if payload.get("password") != settings.ADMIN_PASSWORD:
+async def admin_login(request: Request, payload: dict):
+    """Admin tizimga kirish - brute-force va timing-attack himoyasi bilan."""
+    client_ip = _get_client_ip(request)
+    
+    # Brute-force tekshirish
+    if _check_brute_force(client_ip):
+        raise HTTPException(
+            status_code=429,
+            detail="Juda ko'p urinish. Iltimos, 15 daqiqadan so'ng qayta urinib ko'ring."
+        )
+    
+    provided_password = payload.get("password", "")
+    
+    # Timing-attack himoyasi: secrets.compare_digest ishlatish
+    # Bu har doim bir xil vaqt davom etadi, tajovuzkor parolni tong qila olmaydi
+    if not provided_password:
+        _record_failed_attempt(client_ip)
+        raise HTTPException(status_code=401, detail="Parol kiritilmagan")
+    
+    # Qat'iy solishtirish - timing attack himoyasi
+    is_correct = secrets.compare_digest(provided_password, settings.ADMIN_PASSWORD)
+    
+    if not is_correct:
+        _record_failed_attempt(client_ip)
+        # Xato xabari har doim bir xil uzunlikda bo'lishi uchun
         raise HTTPException(status_code=401, detail="Noto'g'ri parol")
+    
+    # Muvaffaqatli kirish - brute-force cheklovini olib tashlash
+    _clear_brute_force(client_ip)
     return {"ok": True}
 
 

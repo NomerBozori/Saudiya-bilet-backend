@@ -104,6 +104,29 @@ def delete_order(order_id: int) -> None:
     supabase.table("orders").delete().eq("id", order_id).execute()
 
 
+def delete_all_orders() -> int:
+    """Barcha buyurtmalarni va ularga bog'liq pasportlarni o'chiradi.
+    
+    Qaytaradi: o'chirilgan buyurtmalar soni.
+    """
+    # Avval barcha order ID larni olish
+    res = supabase.table("orders").select("id").execute()
+    order_ids = [row["id"] for row in (res.data or []) if row.get("id") is not None]
+    
+    if not order_ids:
+        return 0
+    
+    # Pasportlarni o'chirish
+    try:
+        supabase.table("passports").delete().in_("order_id", order_ids).execute()
+    except Exception:
+        pass
+    
+    # Buyurtmalarni o'chirish
+    supabase.table("orders").delete().in_("id", order_ids).execute()
+    return len(order_ids)
+
+
 def delete_orders_by_status(status: str) -> int:
     """Berilgan holatdagi (masalan 'rejected') barcha buyurtmalarni o'chiradi.
 
