@@ -1428,62 +1428,107 @@ body.tg-body {
   opacity: 1;
 }
 
-/* ==================== v13: NARX OBUNASI ==================== */
-.price-alert-card {
-  margin: 14px 0;
-  padding: 16px;
-  border-radius: 18px;
-  color: #fff;
-  background: linear-gradient(145deg, #0F5132 0%, #123B31 65%, #152F2B 100%);
-  border: 1px solid rgba(243, 215, 122, 0.28);
-  box-shadow: 0 12px 28px rgba(15, 81, 50, 0.18);
+/* ==================== v14: SODDA VIZA KARTOCHKALARI ==================== */
+.visa-section-heading {
+  margin: 4px 2px 14px;
 }
-.price-alert-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px; }
-.price-alert-head h3 { margin:0 0 3px; font-size:15px; font-weight:800; color:#fff; }
-.price-alert-head p { margin:0; font-size:11px; color:rgba(255,255,255,.68); }
-.price-alert-badge { padding:4px 8px; border-radius:999px; background:rgba(243,215,122,.14); border:1px solid rgba(243,215,122,.32); color:#F3D77A; font-size:9px; font-weight:800; letter-spacing:.7px; }
-.price-alert-card .tg-label { color:rgba(255,255,255,.76); }
-.price-alert-card .tg-input { background:rgba(255,255,255,.96); color:#132A22; }
-.price-alert-dates { margin-bottom:0; }
-.price-alert-action { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:stretch; }
-.price-alert-action .tg-input { margin-bottom:0; }
-.price-alert-action .tg-btn-secondary { width:auto; margin:0; white-space:nowrap; color:#0F5132; background:#F3D77A; border-color:#F3D77A; }
-.price-alert-card .tg-hint { color:rgba(255,255,255,.64); margin-bottom:0; }
-.price-alerts-list { display:grid; gap:8px; margin-top:12px; }
-.price-alert-item { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; border-radius:12px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); }
-.price-alert-item.inactive { opacity:.65; }
-.price-alert-item strong { display:block; font-size:11.5px; color:#fff; }
-.price-alert-item span { display:block; margin-top:3px; font-size:9.5px; color:rgba(255,255,255,.65); }
-.price-alert-cancel { flex:0 0 auto; padding:6px 8px; border-radius:8px; border:1px solid rgba(252,165,165,.42); background:rgba(239,68,68,.12); color:#FECACA; font-size:9.5px; font-weight:700; cursor:pointer; }
-.price-alert-login-hint { margin:8px 0 0; color:#FDE68A; font-size:11px; }
-
-/* ==================== v13: VIZA ARIZALARI ==================== */
-.visa-products { display:grid; gap:12px; }
-.visa-choose-btn { border:0; cursor:pointer; }
-.visa-form-card { margin-top:16px; scroll-margin-top:12px; }
-.visa-form-card select.tg-input { appearance:auto; }
-.visa-notes { resize:vertical; min-height:76px; font-family:inherit; }
-.form-message { margin:12px 0 0; padding:10px 12px; border-radius:10px; font-size:11.5px; font-weight:700; }
-.form-message.success { color:#166534; background:#DCFCE7; border:1px solid #86EFAC; }
-.form-message.error { color:#991B1B; background:#FEE2E2; border:1px solid #FCA5A5; }
-.visa-history-card { margin-top:14px; }
-.tg-btn-secondary.compact { width:auto; min-width:40px; margin:0; padding:8px 11px; }
-.visa-applications-list { display:grid; gap:9px; }
-.visa-application-item { padding:12px; border-radius:13px; background:#F8FAFC; border:1px solid #E2E8F0; border-left:4px solid #D4AF37; }
-.visa-application-item.processing { border-left-color:#F59E0B; }
-.visa-application-item.approved { border-left-color:#16A34A; }
-.visa-application-item.rejected { border-left-color:#DC2626; }
-.visa-application-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
-.visa-application-top strong { font-size:11.5px; color:var(--text-dark); }
-.visa-application-top span { flex:0 0 auto; padding:3px 7px; border-radius:999px; background:#E2E8F0; font-size:9px; font-weight:800; }
-.visa-application-item p { margin:5px 0 0; color:var(--text-muted); font-size:10.5px; }
-.visa-application-item .visa-admin-note { padding:7px 8px; border-radius:8px; color:#713F12; background:#FEF3C7; }
-.visa-empty { margin:0; padding:14px; border-radius:10px; color:var(--text-muted); background:#F8FAFC; text-align:center; font-size:11px; }
-.visa-empty.error { color:#B91C1C; }
+.visa-section-kicker {
+  display: inline-block;
+  margin-bottom: 5px;
+  color: #8A6A12;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+.tg-section-desc {
+  margin-top: 4px;
+  color: var(--tg-theme-hint-color, var(--text-muted));
+  font-size: 12px;
+  line-height: 1.45;
+}
+.visa-products {
+  display: grid;
+  gap: 14px;
+}
+.visa-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 0 11px;
+  align-items: start;
+  overflow: hidden;
+  padding: 16px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(212,175,55,0.15), transparent 42%),
+    linear-gradient(145deg, #FFFFFF 0%, #FBFCFF 100%);
+  border: 1px solid rgba(212,175,55,0.26);
+  box-shadow: 0 8px 22px rgba(15,33,71,0.08);
+}
+.visa-card::after {
+  content: "";
+  position: absolute;
+  right: -24px;
+  bottom: -30px;
+  width: 100px;
+  height: 100px;
+  border: 1px solid rgba(212,175,55,0.16);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.visa-card-icon {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: linear-gradient(145deg, #FFF8E1, #F3D77A);
+  border: 1px solid rgba(212,175,55,0.35);
+  box-shadow: 0 5px 12px rgba(212,175,55,0.18);
+  font-size: 21px;
+}
+.visa-card .tg-srv-info {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+.visa-card-label {
+  display: block;
+  margin: 1px 0 4px;
+  color: #8A6A12;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.7px;
+}
+.visa-card .tg-srv-info h3 {
+  margin-bottom: 7px;
+  color: var(--text-dark);
+  font-size: 15px;
+  line-height: 1.25;
+}
+.visa-card .tg-srv-info p {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.visa-card .tg-srv-info p:last-child { margin-bottom: 0; }
+.visa-card .tg-srv-action {
+  position: relative;
+  z-index: 1;
+  grid-column: 1 / -1;
+  width: 100%;
+  margin-top: 13px;
+}
+.visa-card .visa-choose-btn {
+  margin-top: 0;
+  padding: 12px;
+  font-size: 12px;
+}
 
 @media (max-width: 520px) {
-  .price-alert-action { grid-template-columns:1fr; }
-  .price-alert-action .tg-btn-secondary { width:100%; }
-  .price-alert-item { align-items:flex-start; }
-  .visa-application-top { flex-direction:column; }
+  .visa-card { padding: 14px; }
+  .visa-card .tg-srv-info h3 { font-size: 14px; }
 }

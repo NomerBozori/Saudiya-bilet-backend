@@ -283,9 +283,14 @@ async def test_new_miniapp_and_admin_controls_are_shipped():
         admin_html = (await ac.get("/admin/")).text
         admin_js = (await ac.get("/admin/admin.js")).text
 
-    assert 'id="btn-price-alert"' in mini_html
-    assert 'id="btn-submit-visa"' in mini_html
-    assert "loadPriceAlerts" in mini_js and "loadVisaApplications" in mini_js
+    # Mini Appda uzun viza forma/tarix va katta obuna formasi bo'lmasligi kerak.
+    assert 'id="btn-price-alert"' not in mini_html
+    assert 'id="btn-submit-visa"' not in mini_html
+    assert 'id="visa-applications-list"' not in mini_html
+    assert 'class="price-alert-card"' not in mini_html
+    assert "loadPriceAlerts" not in mini_js
+    assert "loadVisaApplications" not in mini_js
+    assert mini_html.count("visa-choose-btn") == 2
     assert 'data-tab="visa-applications"' in admin_html
     assert 'data-tab="price-alerts"' in admin_html
     assert "loadVisaApplicationsAdmin" in admin_js

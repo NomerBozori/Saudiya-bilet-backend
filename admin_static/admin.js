@@ -408,7 +408,7 @@ if (refreshOrdersBtn) refreshOrdersBtn.addEventListener("click", loadOrders);
 const statusFilterEl = document.getElementById("status-filter");
 if (statusFilterEl) statusFilterEl.addEventListener("change", loadOrders);
 
-// ==================== EXCEL (CSV) / XLSX EKSPORT ====================
+// ==================== EXCEL / CSV EKSPORT ====================
 async function exportOrders(format, btn, defaultLabel) {
   const statusFilter = document.getElementById("status-filter");
   const status = statusFilter ? statusFilter.value : "";
@@ -447,13 +447,13 @@ async function exportOrders(format, btn, defaultLabel) {
 const exportExcelBtn = document.getElementById("export-excel-btn");
 if (exportExcelBtn) {
   exportExcelBtn.addEventListener("click", () =>
-    exportOrders("csv", exportExcelBtn, "📊 Excel (CSV) Yuklab Olish"));
+    exportOrders("xlsx", exportExcelBtn, "📊 Excel Yuklab Olish"));
 }
 
-const exportXlsxBtn = document.getElementById("export-xlsx-btn");
-if (exportXlsxBtn) {
-  exportXlsxBtn.addEventListener("click", () =>
-    exportOrders("xlsx", exportXlsxBtn, "📗 XLSX"));
+const exportCsvBtn = document.getElementById("export-csv-btn");
+if (exportCsvBtn) {
+  exportCsvBtn.addEventListener("click", () =>
+    exportOrders("csv", exportCsvBtn, "📄 CSV"));
 }
 
 // ==================== QO'LDA CHIPTA QO'SHISH VA RO'YXAT ====================

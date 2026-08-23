@@ -39,8 +39,10 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("saudiya-bilet")
 
 # Joriy build versiyasi — deploy yangilanganini tekshirish uchun (/api/version)
-APP_BUILD = "v13"
+APP_BUILD = "v14"
 APP_BUILD_FEATURES = [
+    "ixcham viza kartochkalari va operator tugmalari",
+    "ixcham qidiruv oqimi",
     "viza arizalari va admin boshqaruvi",
     "narx tushishi obunasi va Telegram xabari",
     "avto-post 3-35 kun",
@@ -777,9 +779,15 @@ async def api_daily_post(
     if secret != settings.CRON_SECRET:
         raise HTTPException(status_code=403, detail="Ruxsat yo'q")
 
-    # Sana oynasini xavfsiz chegaralarga keltiramiz
-    min_days = max(0, int(min_days))
-    max_days = max(min_days, int(max_days))
+    # Cron parametrlari ham qat'iy 3–35 kunlik oynadan chiqmasin.
+    # Operator ichki oynani qisqartirishi mumkin, lekin uzoq sanalarni yoqolmaydi.
+    try:
+        requested_min = int(min_days)
+        requested_max = int(max_days)
+    except (TypeError, ValueError):
+        requested_min, requested_max = tp.MIN_DAYS_AHEAD, tp.MAX_DAYS_AHEAD
+    min_days = max(tp.MIN_DAYS_AHEAD, min(requested_min, tp.MAX_DAYS_AHEAD))
+    max_days = max(min_days, min(requested_max, tp.MAX_DAYS_AHEAD))
 
     try:
         tickets = await tp.get_daily_cheapest(min_days=min_days, max_days=max_days)
