@@ -230,6 +230,48 @@ def _build_affiliate_link(raw_link: str) -> str:
     return f"{base}{sep}marker={marker}"
 
 
+# Travelpayouts/Aviasales javobida tashuvchi ba'zan IATA kodi, ba'zan to'liq nom
+# ko'rinishida keladi. Ushbu ikki tashuvchi uchun yagona, foydalanuvchiga tushunarli
+# yorliq ishlatamiz. Bu alohida taxminiy reys yaratmaydi: faqat agregatordan kelgan
+# haqiqiy takliflar boyitiladi.
+PARTNER_AIRLINES = {
+    "centrum air": ("C6", "⭐ Centrum Air (To'g'ridan-to'g'ri)", 0),
+    "air arabia": ("G9", "💸 Air Arabia (Arzon Tranzit)", 1),
+}
+
+
+def enrich_partner_offer(offer: dict) -> dict:
+    """Centrum Air va Air Arabia taklifiga mahsulot yorlig'ini qo'shadi.
+
+    `airline` maydoni UI va Telegram postlarida ishlatilgani sababli unda tayyor
+    yorliq saqlanadi; asl tashuvchi kodi `airline_code`da yo'qolmaydi.
+    """
+    enriched = dict(offer)
+    raw_airline = str(enriched.get("airline") or "").strip()
+    raw_code = str(enriched.get("airline_code") or raw_airline).strip().upper()
+    normalized = raw_airline.casefold()
+
+    for name, (code, label, expected_transfers) in PARTNER_AIRLINES.items():
+        if normalized == name or raw_code == code or normalized == code.casefold():
+            enriched["airline_code"] = code
+            enriched["airline_name"] = name.title()
+            enriched["airline"] = label
+            enriched["airline_label"] = label
+            enriched["partner_airline"] = name
+            # Centrum charterlari to'g'ridan-to'g'ri; Air Arabia taklifi tranzit
+            # ekanini faqat agregator transfer sonini bermaganda to'ldiramiz.
+            if enriched.get("transfers") is None:
+                enriched["transfers"] = expected_transfers
+            return enriched
+    return enriched
+
+
+def partner_priority(offer: dict) -> int:
+    """Kunlik postda yangi tashuvchilar umumiy variantlar orasida yo'qolmasin."""
+    partner = str(offer.get("partner_airline") or "").casefold()
+    return {"centrum air": 0, "air arabia": 1}.get(partner, 2)
+
+
 async def search_flights(origin_city: str, destination_city: str, depart_date: str, limit: int = 15) -> list[dict]:
     """Belgilangan sana uchun mavjud chiptalarni qidiradi (narx bo'yicha saralangan)."""
     origin = to_iata(origin_city)
@@ -260,7 +302,7 @@ async def search_flights(origin_city: str, destination_city: str, depart_date: s
     for item in payload.get("data", []):
         original_price = item.get("price")
         marked_up_price = _apply_markup(original_price)
-        results.append({
+        results.append(enrich_partner_offer({
             "origin": item.get("origin") or origin,
             "destination": item.get("destination") or destination,
             "price": marked_up_price,
@@ -270,7 +312,7 @@ async def search_flights(origin_city: str, destination_city: str, depart_date: s
             "return_at": item.get("return_at"),
             "transfers": item.get("transfers", 0),
             "link": _build_affiliate_link(item.get("link", "")),
-        })
+        }))
     return results
 
 
@@ -351,7 +393,7 @@ async def _fetch_window_for_route(
                 price = _apply_markup(item.get("price"))
                 if price is None:
                     continue
-                offers.append({
+                offers.append(enrich_partner_offer({
                     "origin": origin,
                     "destination": destination,
                     "origin_name": city_name(origin),
@@ -362,7 +404,7 @@ async def _fetch_window_for_route(
                     "flight_number": item.get("flight_number") or "",
                     "transfers": item.get("transfers", 0),
                     "source": "api",
-                })
+                }))
         except Exception as e:
             log.warning(f"{origin}->{destination} ({month}) oynadagi narxlarni olishda xatolik: {e}")
             continue
@@ -522,7 +564,12 @@ def pick_mixed_offers(
             continue
         bucket = per_origin.setdefault(origin, {})
         current = bucket.get(dest)
-        if current is None or value < float(current.get("value") or 10 ** 9):
+        # Centrum Air va Air Arabia agregatordan kelgan bo'lsa, ular kunlik
+        # postda boshqa tashuvchilarning arzon narxi orasida yo'qolib ketmaydi.
+        # Bir xil ustuvorlikda odatdagidek eng arzon variant tanlanadi.
+        if current is None or (partner_priority(offer), value) < (
+            partner_priority(current), float(current.get("value") or 10 ** 9)
+        ):
             enriched = dict(offer)
             enriched["origin"] = origin
             enriched["destination"] = dest
