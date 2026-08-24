@@ -562,12 +562,12 @@ function generateComprehensiveFlights(origin, destination, date){
   const originCode=(origin||"TAS").toUpperCase();
   const destCode=(destination||"JED").toUpperCase();
   const airlinesPool=[
-    {name:"Centrum Air", flightNum:"C6-331", depTime:"06:30", arrTime:"10:15", duration:"5s 45d", price:380, baggage:"30 kg + 7 kg", direct:true},
+    {name:"⭐ Centrum Air (To'g'ridan-to'g'ri)", flightNum:"C6-331", depTime:"06:30", arrTime:"10:15", duration:"5s 45d", price:380, baggage:"30 kg + 7 kg", direct:true},
     {name:"Uzbekistan Airways", flightNum:"HY-3381", depTime:"09:45", arrTime:"13:20", duration:"5s 35d", price:420, baggage:"30 kg + 8 kg", direct:true},
     {name:"Flynas", flightNum:"XY-612", depTime:"14:15", arrTime:"18:00", duration:"5s 45d", price:370, baggage:"20 kg + 7 kg", direct:true},
     {name:"Saudia", flightNum:"SV-841", depTime:"18:20", arrTime:"22:05", duration:"5s 45d", price:460, baggage:"2x23 kg (46 kg)", direct:true},
     {name:"Panorama Airways", flightNum:"5P-552", depTime:"04:00", arrTime:"07:45", duration:"5s 45d", price:390, baggage:"30 kg + 7 kg", direct:true},
-    {name:"Air Arabia", flightNum:"G9-224", depTime:"11:20", arrTime:"17:40", duration:"7s 20d", price:325, baggage:"30 kg + 7 kg", direct:false},
+    {name:"💸 Air Arabia (Arzon Tranzit)", flightNum:"G9-224", depTime:"11:20", arrTime:"17:40", duration:"7s 20d", price:325, baggage:"30 kg + 7 kg", direct:false},
     {name:"Jazeera Airways", flightNum:"J9-682", depTime:"05:10", arrTime:"10:30", duration:"6s 20d", price:335, baggage:"30 kg + 7 kg", direct:false}
   ];
   return airlinesPool.map((item,idx)=>({ origin:originCode, destination:destCode, price:item.price, airline:item.name, flight_number:item.flightNum, departure_time:item.depTime, arrival_time:item.arrTime, duration:item.duration, baggage:item.baggage, transfers:item.direct?0:1, source:"estimate" }));

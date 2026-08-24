@@ -231,6 +231,7 @@ async def api_search(origin: str, destination: str, depart_date: str):
     # 2) Travelpayouts API
     try:
         api_results = await tp.search_flights(origin, destination, depart_date)
+        api_results = [tp.enrich_partner_offer(r) for r in api_results]
         for r in api_results:
             r["source"] = "api"
     except Exception:
@@ -797,7 +798,7 @@ async def api_daily_post(
 
     # 1) Faqat narxi bor va sanasi 3–35 kun oynasiga tushadigan takliflar
     valid_tickets = tp.filter_offers_by_window(
-        [t for t in (tickets or []) if t.get("value") is not None],
+        [tp.enrich_partner_offer(t) for t in (tickets or []) if t.get("value") is not None],
         min_days=min_days,
         max_days=max_days,
     )
@@ -840,10 +841,13 @@ async def api_daily_post(
         if days_left is None:
             days_left = tp.days_until(t.get("depart_date"))
         days_note = f" — {days_left} kundan keyin" if days_left is not None else ""
+        airline_label = str(t.get("airline_label") or t.get("airline") or "").strip()
+        airline_line = f"   ✈️ {airline_label}\n" if airline_label else ""
         text += (
             f"{dest_icon} <b>{origin_name} ({origin}) ➔ {dest_name} ({dest})</b>\n"
             f"   📅 Sana: <code>{date_label}</code>{days_note}\n"
             f"   💵 Narxi: <b>${val}</b> (~{val_uzs} so'm)\n"
+            f"{airline_line}"
             f"   🧳 Bagaj: 30 kg + 7 kg | 🍽 Issiq taom bepul\n"
             f"   ──────────────\n"
         )
