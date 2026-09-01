@@ -287,7 +287,36 @@ function renderOrders(orders) {
     const birthYear = escapeHtml(passport.birth_year || "");
     const paymentUrl = escapeAttr(order.payment_screenshot_url || "");
     const orderStatus = escapeHtml(order.status || "new");
-    
+
+    // Parvoz tafsilotlari: flight_data string bo'lishi mumkin (JSON) yoki object
+    let flightData = order.flight_data;
+    if (typeof flightData === "string") {
+      try {
+        flightData = JSON.parse(flightData);
+      } catch (e) {
+        flightData = null;
+      }
+    }
+    if (!flightData || typeof flightData !== "object") flightData = {};
+
+    const flightAirline = escapeHtml(flightData.airline || "");
+    const flightNumber = escapeHtml(flightData.flight_number || "");
+    const flightDeparture = escapeHtml(flightData.departure_at || flightData.departure_time || "");
+    const flightLinkRaw = String(flightData.link || "").trim();
+    const flightLink = (flightLinkRaw.startsWith("http://") || flightLinkRaw.startsWith("https://")) ? escapeAttr(flightLinkRaw) : "";
+
+    const flightInfoHtml = (flightAirline || flightDeparture)
+      ? `
+      <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+        ${flightAirline ? `<span>🛫 ${flightAirline}${flightNumber ? " (" + flightNumber + ")" : ""}</span>` : ""}
+        ${flightDeparture ? `<span>🕐 ${flightDeparture}</span>` : ""}
+      </div>
+      ` : "";
+
+    const flightLinkHtml = flightLink
+      ? `<a class="order-btn" style="display:block; text-align:center; text-decoration:none; margin-bottom:8px;" href="${flightLink}" target="_blank" rel="noopener noreferrer">🔗 Chiptani xarid qilish (Aviasales)</a>`
+      : "";
+
     card.innerHTML = `
       <div class="order-top">
         <div class="order-id">#${orderId} — ✈️ ${origin} ➔ ${destination}</div>
@@ -312,6 +341,9 @@ function renderOrders(orders) {
           <strong style="color: var(--primary); font-size: 15px;">$${price}</strong>
         </div>
       </div>
+
+      ${flightInfoHtml}
+      ${flightLinkHtml}
 
       <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
         <span>👤 Telegram: <code>${telegramId}</code> ${username ? "(@" + username + ")" : ""}</span>
