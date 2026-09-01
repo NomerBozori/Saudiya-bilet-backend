@@ -3,10 +3,23 @@ let cachedOrders = [];
 let cbuRate = 12850;
 let pendingDelete = { type: null, id: null };
 
+// ==================== XSS HIMOYASI ====================
 function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>'"]/g, ch => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
-  })[ch]);
+  // XSS himoyasi: barcha maxsus belgilarni HTML entity ga aylantirish
+  if (value === null || value === undefined) return "";
+  const str = String(value);
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/`/g, "&#96;");
+}
+
+function escapeAttr(value) {
+  // HTML atribut ichida ishlatish uchun qo'shimcha himoya
+  return escapeHtml(value).replace(/\n/g, "&#10;").replace(/\r/g, "&#13;");
 }
 
 // ==================== AVTOMATIK TAKLIF (SHAHARLAR) ====================
@@ -256,56 +269,70 @@ function renderOrders(orders) {
     const p_raw = order.passports;
     const passport = (Array.isArray(p_raw) && p_raw[0]) ? p_raw[0] : (p_raw && typeof p_raw === "object" ? p_raw : {});
     const statusClass = order.status === "confirmed" ? "confirmed" : order.status === "rejected" ? "rejected" : "";
-    const origin = (order.origin || "-").toUpperCase();
-    const destination = (order.destination || "-").toUpperCase();
+    const origin = escapeHtml((order.origin || "-").toUpperCase());
+    const destination = escapeHtml((order.destination || "-").toUpperCase());
     const card = document.createElement("div");
     card.className = `order-card ${statusClass}`;
     
+    // XSS himoyasi: barcha ma'lumotlarni escape qilish
+    const orderId = escapeHtml(String(order.id || ""));
+    const firstName = escapeHtml(passport.first_name || "-");
+    const lastName = escapeHtml(passport.last_name || "");
+    const passportNum = escapeHtml(passport.passport_number || "-");
+    const departDate = escapeHtml(order.depart_date || "-");
+    const passengers = escapeHtml(String(order.passengers || 1));
+    const price = escapeHtml(String(order.price ?? "-"));
+    const telegramId = escapeHtml(String(order.telegram_user_id || "-"));
+    const username = escapeHtml(order.username || "");
+    const birthYear = escapeHtml(passport.birth_year || "");
+    const paymentUrl = escapeAttr(order.payment_screenshot_url || "");
+    const orderStatus = escapeHtml(order.status || "new");
+    
     card.innerHTML = `
       <div class="order-top">
-        <div class="order-id">#${order.id} — ✈️ ${origin} ➔ ${destination}</div>
-        <div class="order-status-badge ${statusClass}">${STATUS_LABELS[order.status] || order.status || "Noma'lum"}</div>
+        <div class="order-id">#${orderId} — ✈️ ${origin} ➔ ${destination}</div>
+        <div class="order-status-badge ${statusClass}">${STATUS_LABELS[orderStatus] || orderStatus || "Noma'lum"}</div>
       </div>
       
       <div class="order-details-grid">
         <div class="order-detail-item">
           <span>YO'LOVCHI F.I.SH</span>
-          <strong>${passport.first_name || "-"} ${passport.last_name || ""}</strong>
+          <strong>${firstName} ${lastName}</strong>
         </div>
         <div class="order-detail-item">
           <span>PASPORT RAQAMI</span>
-          <strong>${passport.passport_number || "-"}</strong>
+          <strong>${passportNum}</strong>
         </div>
         <div class="order-detail-item">
           <span>UCHISH SANASI</span>
-          <strong>${order.depart_date || "-"} (${order.passengers || 1} yo'lovchi)</strong>
+          <strong>${departDate} (${passengers} yo'lovchi)</strong>
         </div>
         <div class="order-detail-item">
           <span>SUMMA (TO'LOV)</span>
-          <strong style="color: var(--primary); font-size: 15px;">$${order.price ?? "-"}</strong>
+          <strong style="color: var(--primary); font-size: 15px;">$${price}</strong>
         </div>
       </div>
 
       <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
-        <span>👤 Telegram: <code>${order.telegram_user_id || "-"}</code> ${order.username ? "(@" + order.username + ")" : ""}</span>
-        ${passport.birth_year ? `<span style="background:#F1F5F9; padding:2px 8px; border-radius:8px;">🎂 ${passport.birth_year}</span>` : ""}
+        <span>👤 Telegram: <code>${telegramId}</code> ${username ? "(@" + username + ")" : ""}</span>
+        ${birthYear ? `<span style="background:#F1F5F9; padding:2px 8px; border-radius:8px;">🎂 ${birthYear}</span>` : ""}
       </div>
 
-      ${order.payment_screenshot_url ? `
+      ${paymentUrl ? `
         <div style="margin-top: 8px; margin-bottom: 8px;">
           <span style="font-size: 10.5px; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px; letter-spacing:0.5px;">TO'LOV CHEKI (BOSING):</span>
-          <img class="order-photo-thumb" src="${order.payment_screenshot_url}" alt="To'lov cheki" onclick="openImgModal('${order.payment_screenshot_url}')">
+          <img class="order-photo-thumb" src="${paymentUrl}" alt="To'lov cheki" onclick="openImgModal('${paymentUrl}')">
         </div>
       ` : `<div style="font-size:11px; color:#94A3B8; margin:6px 0;">💳 To'lov cheki hali yuklanmagan</div>`}
 
       <div class="order-actions">
-        ${order.status === "new" || order.status === "awaiting_confirmation" ? `
-          <button class="order-btn confirm" data-id="${order.id}" data-action="confirm">✅ Tasdiqlash & PDF Yuborish</button>
-          <button class="order-btn reject" data-id="${order.id}" data-action="reject">❌ Rad Etish</button>
+        ${orderStatus === "new" || orderStatus === "awaiting_confirmation" ? `
+          <button class="order-btn confirm" data-id="${orderId}" data-action="confirm">✅ Tasdiqlash & PDF Yuborish</button>
+          <button class="order-btn reject" data-id="${orderId}" data-action="reject">❌ Rad Etish</button>
         ` : `
-          <span style="font-size:11px; color:var(--text-muted); padding:8px 0;">☑️ ${STATUS_LABELS[order.status] || order.status}</span>
+          <span style="font-size:11px; color:var(--text-muted); padding:8px 0;">☑️ ${STATUS_LABELS[orderStatus] || orderStatus}</span>
         `}
-        <button class="order-btn delete" data-id="${order.id}" data-action="delete-order" title="Oxirgi o'chirish tugmasi">🗑 O'chirish</button>
+        <button class="order-btn delete" data-id="${orderId}" data-action="delete-order" title="Buyurtmani o'chirish">🗑 O'chirish</button>
       </div>
     `;
     list.appendChild(card);
@@ -475,24 +502,35 @@ function renderFlights(flights) {
     return;
   }
   flights.forEach(f => {
-    const origin = (f.origin || "-").toUpperCase();
-    const destination = (f.destination || "-").toUpperCase();
+    // XSS himoyasi: barcha ma'lumotlarni escape qilish
+    const origin = escapeHtml((f.origin || "-").toUpperCase());
+    const destination = escapeHtml((f.destination || "-").toUpperCase());
+    const departDate = escapeHtml(f.depart_date || "");
+    const departTime = escapeHtml(f.departure_time || "");
+    const airline = escapeHtml(f.airline || "");
+    const flightNum = escapeHtml(f.flight_number || "-");
+    const seats = escapeHtml(String(f.seats_available ?? "Ko'p"));
+    const transfers = escapeHtml(String(f.transfers ?? 0));
+    const isActive = f.is_active ? "✅ Faol" : "⏸ Nofaol";
+    const price = escapeHtml(String(f.price ?? 0));
+    const flightId = escapeHtml(String(f.id || ""));
+    
     const card = document.createElement("div");
     card.className = "flight-item-card";
     card.innerHTML = `
       <div>
         <div class="flight-route-title">✈️ ${origin} ➔ ${destination}</div>
         <div style="font-size: 13px; color: var(--text-muted); margin-top: 6px; line-height:1.4;">
-          📅 ${f.depart_date || ""} ${f.departure_time || ""} | 🛫 ${f.airline || ""} (${f.flight_number || "-"})<br>
-          💺 O'rindiqlar: <strong>${f.seats_available ?? "Ko'p"}</strong> | 🔄 ${f.transfers ?? 0} tranzit | ${f.is_active ? "✅ Faol" : "⏸ Nofaol"}
+          📅 ${departDate} ${departTime} | 🛫 ${airline} (${flightNum})<br>
+          💺 O'rindiqlar: <strong>${seats}</strong> | 🔄 ${transfers} tranzit | ${isActive}
         </div>
       </div>
       <div style="display: flex; align-items: center; gap: 14px;">
         <div style="text-align:right;">
-          <div style="font-size: 20px; font-weight: 800; color: var(--primary);">$${f.price ?? 0}</div>
+          <div style="font-size: 20px; font-weight: 800; color: var(--primary);">$${price}</div>
           <div style="font-size:10px; color:var(--text-muted);">USD</div>
         </div>
-        <button class="flight-del-btn" data-id="${f.id}">🗑 O'chirish</button>
+        <button class="flight-del-btn" data-id="${flightId}">🗑 O'chirish</button>
       </div>
     `;
     list.appendChild(card);
@@ -767,6 +805,49 @@ if (clearRejectedBtn) {
     } finally {
       clearRejectedBtn.innerText = oldText;
       clearRejectedBtn.disabled = false;
+    }
+  });
+}
+
+// ==================== BARCHA BUYURTMALARNI O'CHIRISH ====================
+const deleteAllOrdersBtn = document.getElementById("delete-all-orders-btn");
+if (deleteAllOrdersBtn) {
+  deleteAllOrdersBtn.addEventListener("click", async () => {
+    const totalCount = cachedOrders.length;
+    if (totalCount === 0) {
+      alert("O'chirish uchun buyurtmalar yo'q.");
+      return;
+    }
+    
+    // Ikki marta tasdiqlash - xavfsizlik uchun
+    const firstConfirm = confirm(
+      `⚠️ DIQQAT: ${totalCount} ta buyurtma O'CHIRILADI!\n\n` +
+      `Bu amali ortga qaytarib BO'LMAYDI!\n\n` +
+      `Davom etishni xohlaysizmi?`
+    );
+    if (!firstConfirm) return;
+    
+    const secondConfirm = confirm(
+      `🚨 YAKUNIY TASDIQLASH:\n\n` +
+      `${totalCount} ta buyurtma to'liq o'chiriladi.\n\n` +
+      `Ha, men barchasini o'chirishni tasdiqlayman.`
+    );
+    if (!secondConfirm) return;
+    
+    const oldText = deleteAllOrdersBtn.innerText;
+    deleteAllOrdersBtn.innerText = "⏳ Barchasi o'chirilmoqda...";
+    deleteAllOrdersBtn.disabled = true;
+    
+    try {
+      const data = await apiFetch("/api/admin/orders", { method: "DELETE" });
+      alert(`🗑 ${data.deleted || 0} ta buyurtma muvaffaqiyatli o'chirildi.`);
+      cachedOrders = [];
+      loadOrders();
+    } catch (e) {
+      alert("O'chirishda xatolik: " + e.message);
+    } finally {
+      deleteAllOrdersBtn.innerText = oldText;
+      deleteAllOrdersBtn.disabled = false;
     }
   });
 }

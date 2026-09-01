@@ -40,10 +40,28 @@ document.querySelectorAll(".tg-curr-btn").forEach(btn => {
   });
 });
 
+// ==================== XSS HIMOYASI ====================
 function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>'"]/g, ch => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
-  })[ch]);
+  // XSS himoyasi: barcha maxsus belgilarni HTML entity ga aylantirish
+  if (value === null || value === undefined) return "";
+  const str = String(value);
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/`/g, "&#96;");
+}
+
+function escapeAttr(value) {
+  // HTML atribut ichida ishlatish uchun qo'shimcha himoya
+  return escapeHtml(value).replace(/\n/g, "&#10;").replace(/\r/g, "&#13;");
+}
+
+function safeText(value, defaultVal = "") {
+  // Xavfsiz matn olish - XSS himoyasi bilan
+  return escapeHtml(value || defaultVal);
 }
 
 function formatPrice(usdPrice) {
@@ -362,19 +380,24 @@ function renderDeals(deals){
   }
   strip.innerHTML = "";
   deals.forEach((d, idx) => {
-    const originName = d.origin_name || CITY_NAME_MAP[d.origin] || d.origin;
-    const destName = d.destination_name || CITY_NAME_MAP[d.destination] || d.destination;
+    // XSS himoyasi: barcha ma'lumotlarni escape qilish
+    const originCode = safeText(d.origin, "");
+    const destCode = safeText(d.destination, "");
+    const originName = safeText(d.origin_name || CITY_NAME_MAP[d.origin] || d.origin, "");
+    const destName = safeText(d.destination_name || CITY_NAME_MAP[d.destination] || d.destination, "");
+    const daysLeft = d.days_left != null ? ` · ${safeText(d.days_left)} kun` : "";
+    
     const card = document.createElement("button");
     card.type = "button";
     card.className = ["deal-card", d.is_cheapest ? "best" : ""].join(" ").trim();
     card.innerHTML = `
       ${d.is_cheapest ? '<span class="deal-badge">🏆 ENG ARZON</span>' : ""}
       <span class="deal-route">
-        <b>${d.origin}</b><span class="deal-arrow">✈</span><b>${d.destination}</b>
+        <b>${originCode}</b><span class="deal-arrow">✈</span><b>${destCode}</b>
       </span>
       <span class="deal-cities">${originName} → ${destName}</span>
       <span class="deal-price">${dealPriceLabel(d.price)}</span>
-      <span class="deal-date">📅 ${shortDate(d.depart_date)}${d.days_left != null ? ` · ${d.days_left} kun` : ""}</span>
+      <span class="deal-date">📅 ${shortDate(d.depart_date)}${daysLeft}</span>
     `;
     card.addEventListener("click", () => applyDeal(d));
     strip.appendChild(card);
