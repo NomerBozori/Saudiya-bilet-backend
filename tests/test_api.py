@@ -115,3 +115,68 @@ async def test_create_order_endpoint():
             res = await ac.post("/api/orders", json=payload)
             assert res.status_code == 200
             assert res.json()["order_id"] == 77
+
+
+@pytest.mark.asyncio
+async def test_create_order_admin_message_includes_flight_details():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        payload = {
+            "telegram_user_id": 123456,
+            "origin": "TAS",
+            "destination": "JED",
+            "depart_date": "2026-09-01",
+            "flight_data": {
+                "price": 380,
+                "airline": "Centrum Air <hack>",
+                "flight_number": "HY-123",
+                "departure_at": "2026-09-01T09:30:00",
+                "link": "https://tp.media/click?marker=1&trs=1",
+            },
+            "passport": {
+                "first_name": "Ali",
+                "last_name": "Valiyev",
+                "passport_number": "AA1234567",
+            },
+        }
+        with patch.object(db, "create_order", return_value={"id": 78, "origin": "TAS", "destination": "JED", "depart_date": "2026-09-01", "price": 380}), \
+             patch.object(db, "save_passport", return_value=payload["passport"]), \
+             patch("main.bot.send_message", new_callable=AsyncMock) as mock_send:
+            res = await ac.post("/api/orders", json=payload)
+            assert res.status_code == 200
+
+        text = mock_send.await_args.args[1]
+        assert "🛫 Aviakompaniya: Centrum Air &lt;hack&gt; (HY-123)" in text
+        assert "🕐 Jo'nash vaqti: 2026-09-01T09:30:00" in text
+        assert "🔗 Chiptani shu havoladan oling: https://tp.media/click?marker=1&amp;trs=1" in text
+
+
+@pytest.mark.asyncio
+async def test_create_order_admin_message_ignores_unsafe_link():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        payload = {
+            "telegram_user_id": 123456,
+            "origin": "TAS",
+            "destination": "JED",
+            "depart_date": "2026-09-01",
+            "flight_data": {
+                "price": 380,
+                "airline": "Centrum Air",
+                "link": "javascript:alert(1)",
+            },
+            "passport": {
+                "first_name": "Ali",
+                "last_name": "Valiyev",
+                "passport_number": "AA1234567",
+            },
+        }
+        with patch.object(db, "create_order", return_value={"id": 79, "origin": "TAS", "destination": "JED", "depart_date": "2026-09-01", "price": 380}), \
+             patch.object(db, "save_passport", return_value=payload["passport"]), \
+             patch("main.bot.send_message", new_callable=AsyncMock) as mock_send:
+            res = await ac.post("/api/orders", json=payload)
+            assert res.status_code == 200
+
+        text = mock_send.await_args.args[1]
+        assert "javascript:" not in text
+        assert "Chiptani shu havoladan oling" not in text

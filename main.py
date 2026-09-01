@@ -50,7 +50,7 @@ BRUTE_FORCE_LOCKOUT_SECONDS = 15 * 60  # 15 daqiqa
 def _check_brute_force(ip: str) -> bool:
     """True qaytaradi agar IP bloklangan bo'lsa."""
     now = time.time()
-    entry = _brute_force_store.get(ip)
+    entry = _brute_force_store[ip]
     if entry["locked_until"] > now:
         return True
     if entry["attempts"] >= BRUTE_FORCE_MAX_ATTEMPTS:
@@ -388,11 +388,34 @@ async def api_create_order(payload: dict):
     order_id = order.get("id")
     passport = db.save_passport(order_id, passport_data)
 
-    first_n = passport.get("first_name") or "-"
-    last_n = passport.get("last_name") or ""
-    p_num = passport.get("passport_number") or "-"
-    b_year = passport.get("birth_year") or "-"
-    exp_date = passport.get("expiry_date") or "-"
+    first_n = html.escape(str(passport.get("first_name") or "-"))
+    last_n = html.escape(str(passport.get("last_name") or ""))
+    p_num = html.escape(str(passport.get("passport_number") or "-"))
+    b_year = html.escape(str(passport.get("birth_year") or "-"))
+    exp_date = html.escape(str(passport.get("expiry_date") or "-"))
+
+    flight_info_lines = []
+    if isinstance(flight_data, dict):
+        airline = html.escape(str(flight_data.get("airline") or "").strip())
+        flight_number = html.escape(str(flight_data.get("flight_number") or "").strip())
+        departure_value = flight_data.get("departure_at") or flight_data.get("departure_time")
+        departure_str = html.escape(str(departure_value).strip()) if departure_value else ""
+        link_value = str(flight_data.get("link") or "").strip()
+
+        if airline:
+            airline_line = f"🛫 Aviakompaniya: {airline}"
+            if flight_number:
+                airline_line += f" ({flight_number})"
+            flight_info_lines.append(airline_line)
+        if departure_str:
+            flight_info_lines.append(f"🕐 Jo'nash vaqti: {departure_str}")
+        if link_value.startswith("http://") or link_value.startswith("https://"):
+            safe_link = html.escape(link_value)
+            flight_info_lines.append(f"🔗 Chiptani shu havoladan oling: {safe_link}")
+
+    flight_info_block = ""
+    if flight_info_lines:
+        flight_info_block = "\n".join(flight_info_lines) + "\n\n"
 
     text = (
         f"🆕 <b>Yangi buyurtma #{order_id}</b>\n\n"
@@ -403,6 +426,7 @@ async def api_create_order(payload: dict):
         f"✈️ {order.get('origin')} ➔ {order.get('destination')}\n"
         f"🗓 {order.get('depart_date')} | 👥 {order.get('passengers', 1)} yo'lovchi\n"
         f"💵 <b>${order.get('price', '-')} USD</b>\n\n"
+        f"{flight_info_block}"
         f"👇 Pastdagi tugmalar orqali 1 bosishda boshqaring:"
     )
     try:
