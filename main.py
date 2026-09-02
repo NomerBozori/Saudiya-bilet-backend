@@ -154,6 +154,45 @@ IATA_RE = re.compile(r"^[A-Z0-9]{3}$")
 MAX_ALERT_RANGE_DAYS = 60
 TELEGRAM_INIT_DATA_MAX_AGE = 24 * 60 * 60
 
+# Aviakompaniyalarning RASMIY saytlari — admin xabaridagi "Xavfsiz xarid" havolasi uchun.
+# Kalit: IATA kodi; qiymat: (rasmiy to'liq nom, rasmiy sayt URL).
+AIRLINE_OFFICIAL_SITES: dict[str, tuple[str, str]] = {
+    "HY": ("UZBEKISTAN AIRWAYS", "https://www.uzairways.com"),
+    "C6": ("CENTRUM AIR", "https://centrum-air.com"),
+    "SV": ("SAUDIA", "https://www.saudia.com"),
+    "TK": ("TURKISH AIRLINES", "https://www.turkishairlines.com"),
+    "FZ": ("FLYDUBAI", "https://www.flydubai.com"),
+    "G9": ("AIR ARABIA", "https://www.airarabia.com"),
+    "XY": ("FLYNAS", "https://flynas.com"),
+    "QR": ("QATAR AIRWAYS", "https://www.qatarairways.com"),
+    "EK": ("EMIRATES", "https://www.emirates.com"),
+}
+
+
+def _official_airline_site(flight: dict) -> tuple[str, str] | None:
+    """flight_data'dagi aviakompaniya kodi yoki to'liq nomi bo'yicha rasmiy saytni topadi.
+
+    Moslik IATA kodi ("HY") yoki to'liq nom ("Uzbekistan Airways", har qanday
+    registrda) bo'yicha tekshiriladi. Topilmasa — None qaytadi va xabarga
+    "rasmiy sayt" qatori qo'shilmaydi.
+    """
+    code = str(flight.get("airline_code") or "").strip().upper()
+    name = str(flight.get("airline") or "").strip().upper()
+
+    # 1) IATA kodi bo'yicha (airline_code yoki airline maydonining o'zi kod bo'lsa)
+    for candidate in (code, name):
+        if candidate:
+            entry = AIRLINE_OFFICIAL_SITES.get(candidate)
+            if entry:
+                return entry
+    # 2) To'liq nom bo'yicha (har qanday registrda; masalan "Uzbekistan Airways")
+    if name:
+        for official_name, url in AIRLINE_OFFICIAL_SITES.values():
+            if name == official_name or (official_name and official_name in name):
+                return official_name, url
+    return None
+
+
 bot = Bot(token=settings.BOT_TOKEN)
 dp = Dispatcher()
 dp.include_router(bot_router)
@@ -346,9 +385,10 @@ async def api_search(origin: str, destination: str, depart_date: str):
         "manual_flight_id": f.get("id"),
     } for f in manual]
 
-    # 2) Travelpayouts API
+    # 2) Travelpayouts API — faqat ishonchli aviakompaniyalar (TRUSTED_AIRLINES)
     try:
         api_results = await tp.search_flights(origin, destination, depart_date)
+        api_results = [f for f in api_results if f.get("airline") in tp.TRUSTED_AIRLINES or tp.is_trusted_offer(f)]
         api_results = [tp.enrich_partner_offer(r) for r in api_results]
         for r in api_results:
             r["source"] = "api"
@@ -367,7 +407,15 @@ async def api_create_order(payload: dict):
         if field not in payload:
             raise HTTPException(status_code=400, detail=f"'{field}' maydoni yo'q")
 
+    # flight_data string (JSON) ko'rinishida ham kelishi mumkin — parse qilinadi
     flight_data = payload.get("flight_data") or {}
+    if isinstance(flight_data, str):
+        try:
+            flight_data = json.loads(flight_data)
+        except (TypeError, ValueError):
+            flight_data = {}
+    if not isinstance(flight_data, dict):
+        flight_data = {}
     price = payload.get("price")
     if price is None and isinstance(flight_data, dict):
         price = flight_data.get("price")
@@ -409,9 +457,16 @@ async def api_create_order(payload: dict):
             flight_info_lines.append(airline_line)
         if departure_str:
             flight_info_lines.append(f"🕐 Jo'nash vaqti: {departure_str}")
-        if link_value.startswith("http://") or link_value.startswith("https://"):
+        if link_value.lower().startswith(("http://", "https://")):
             safe_link = html.escape(link_value)
             flight_info_lines.append(f"🔗 Chiptani shu havoladan oling: {safe_link}")
+        # Aviakompaniya rasmiy sayti (kod yoki to'liq nom bo'yicha) — XSS himoyasi bilan
+        official = _official_airline_site(flight_data)
+        if official:
+            official_name, official_url = official
+            flight_info_lines.append(
+                f"✅ Xavfsiz xarid (rasmiy sayt): {html.escape(official_name)} — {html.escape(official_url)}"
+            )
 
     flight_info_block = ""
     if flight_info_lines:
