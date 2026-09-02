@@ -230,6 +230,25 @@ def _build_affiliate_link(raw_link: str) -> str:
     return f"{base}{sep}marker={marker}"
 
 
+# ==================== ISHONCHLI AVIATASHUVCHILAR ====================
+# Qidiruv (search) natijalarida faqat shu aviakompaniyalarning Travelpayouts
+# API takliflari ko'rsatiladi. Qo'lda qo'shilgan (manual) va zaxira/generatsiya
+# qilingan chiptalar bu ro'yxatga bog'liq emas — ularga tegilmaydi.
+TRUSTED_AIRLINES: frozenset[str] = frozenset({
+    "HY",  # Uzbekistan Airways
+    "C6",  # Centrum Air
+    "SV",  # Saudia
+    "TK",  # Turkish Airlines
+    "FZ",  # flydubai
+    "G9",  # Air Arabia
+    "XY",  # Flynas
+    "QR",  # Qatar Airways
+    "EK",  # Emirates
+    "KC",  # Air Astana
+    "WY",  # Oman Air
+    "MS",  # EgyptAir
+})
+
 # Travelpayouts/Aviasales javobida tashuvchi ba'zan IATA kodi, ba'zan to'liq nom
 # ko'rinishida keladi. Ushbu ikki tashuvchi uchun yagona, foydalanuvchiga tushunarli
 # yorliq ishlatamiz. Bu alohida taxminiy reys yaratmaydi: faqat agregatordan kelgan
@@ -238,6 +257,20 @@ PARTNER_AIRLINES = {
     "centrum air": ("C6", "⭐ Centrum Air (To'g'ridan-to'g'ri)", 0),
     "air arabia": ("G9", "💸 Air Arabia (Arzon Tranzit)", 1),
 }
+
+
+def is_trusted_offer(offer: dict) -> bool:
+    """API'dan kelgan taklif ishonchli aviakompaniyaga tegishlimi?
+
+    `airline` maydonida IATA kodi ("HY") yoki to'liq nom ("centrum air") kelishi
+    mumkin; Centrum Air / Air Arabia nom bilan kelganida ham ularning kodlari
+    (C6/G9) ishonchli ro'yxatda ekani hisobga olinadi.
+    """
+    raw = str(offer.get("airline") or "").strip()
+    code = str(offer.get("airline_code") or raw).strip().upper()
+    if code in TRUSTED_AIRLINES:
+        return True
+    return raw.casefold() in PARTNER_AIRLINES
 
 
 def enrich_partner_offer(offer: dict) -> dict:
@@ -300,6 +333,10 @@ async def search_flights(origin_city: str, destination_city: str, depart_date: s
 
     results = []
     for item in payload.get("data", []):
+        # Faqat ishonchli aviakompaniyalar (TRUSTED_AIRLINES) takliflari qoladi;
+        # noma'lum yoki ro'yxatdan tashqari tashuvchilar o'tkazib yuboriladi.
+        if not is_trusted_offer({"airline": item.get("airline")}):
+            continue
         original_price = item.get("price")
         marked_up_price = _apply_markup(original_price)
         results.append(enrich_partner_offer({
