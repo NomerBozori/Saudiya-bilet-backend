@@ -8,7 +8,7 @@ import os
 import re
 import secrets
 import time
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, quote
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from collections import defaultdict
@@ -191,6 +191,38 @@ def _official_airline_site(flight: dict) -> tuple[str, str] | None:
             if name == official_name or (official_name and official_name in name):
                 return official_name, url
     return None
+
+
+DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+GOOGLE_FLIGHTS_BASE = "https://www.google.com/travel/flights?q="
+
+
+def _google_flights_url(order: dict, flight_data: dict) -> str:
+    """Aynan shu reysni ochadigan Google Flights havolasi (URL-encode qilingan).
+
+    So'rov: "flights from {origin} to {destination} on {sana}" — aviakompaniya
+    nomi bo'lsa oxiriga " on {aviakompaniya}" qo'shiladi, shunda Google Flights
+    aynan o'sha reysni ko'rsatadi.
+    """
+    origin_safe = str(order.get("origin") or "").strip()
+    dest_safe = str(order.get("destination") or "").strip()
+
+    # Sana: flight_data'dagi ISO vaqt bo'lsa uning sana qismi, aks holda buyurtma sanasi
+    depart_raw = str(
+        flight_data.get("departure_at")
+        or flight_data.get("departure_time")
+        or ""
+    ).strip()
+    if not DATE_ONLY_RE.match(depart_raw):
+        depart_raw = str(order.get("depart_date") or "").strip()
+    depart_safe = depart_raw[:10]
+
+    f_airline = str(flight_data.get("airline") or "").strip()
+
+    gf_query = f"flights from {origin_safe} to {dest_safe} on {depart_safe}"
+    if f_airline:
+        gf_query += f" on {f_airline}"
+    return GOOGLE_FLIGHTS_BASE + quote(gf_query)
 
 
 bot = Bot(token=settings.BOT_TOKEN)
@@ -460,12 +492,18 @@ async def api_create_order(payload: dict):
         if link_value.lower().startswith(("http://", "https://")):
             safe_link = html.escape(link_value)
             flight_info_lines.append(f"🔗 Chiptani shu havoladan oling: {safe_link}")
+        # Xavfsiz xarid: aynan shu reysni Google Flights'da ochadigan havola
+        gf_url = _google_flights_url(order, flight_data)
+        gf_href = html.escape(gf_url, quote=True)
+        flight_info_lines.append(
+            f"✅ <b>Xavfsiz xarid:</b> <a href=\"{gf_href}\">O'sha reysni ochish ➔</a>"
+        )
         # Aviakompaniya rasmiy sayti (kod yoki to'liq nom bo'yicha) — XSS himoyasi bilan
         official = _official_airline_site(flight_data)
         if official:
             official_name, official_url = official
             flight_info_lines.append(
-                f"✅ Xavfsiz xarid (rasmiy sayt): {html.escape(official_name)} — {html.escape(official_url)}"
+                f"🏢 <b>Rasmiy sayt:</b> {html.escape(official_name)} — {html.escape(official_url)}"
             )
 
     flight_info_block = ""

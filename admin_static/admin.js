@@ -305,6 +305,14 @@ function renderOrders(orders) {
     const flightLinkRaw = String(flightData.link || "").trim();
     const flightLink = (flightLinkRaw.startsWith("http://") || flightLinkRaw.startsWith("https://")) ? escapeAttr(flightLinkRaw) : "";
 
+    // Link bo'lmaganda — aynan shu reysni Google Flights'da xavfsiz ochish.
+    // Qo'lda/agentlik orqali qo'shilgan chiptalar (manual, direct_agency, centrum_air) bundan mustasno.
+    const flightSource = String(flightData.source || "").trim().toLowerCase();
+    const NON_PUBLIC_SOURCES = ["manual", "direct_agency", "centrum_air"];
+    const gfQuery = `flights from ${(order.origin || "").toUpperCase()} to ${(order.destination || "").toUpperCase()} on ${order.depart_date || ""}`
+      + (flightData.airline ? ` on ${flightData.airline}` : "");
+    const gfUrl = "https://www.google.com/travel/flights?q=" + encodeURIComponent(gfQuery);
+
     const flightInfoHtml = (flightAirline || flightDeparture)
       ? `
       <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
@@ -315,6 +323,11 @@ function renderOrders(orders) {
 
     const flightLinkHtml = flightLink
       ? `<a class="order-btn" style="display:block; text-align:center; text-decoration:none; margin-bottom:8px;" href="${flightLink}" target="_blank" rel="noopener noreferrer">🔗 Chiptani xarid qilish (Aviasales)</a>`
+      : "";
+
+    // Link yo'q va manba "qo'lda/agentlik" bo'lmasa — Google Flights orqali xavfsiz xarid tugmasi
+    const safeBuyLinkHtml = (!flightLink && !NON_PUBLIC_SOURCES.includes(flightSource))
+      ? `<a class="order-btn" style="display:block; text-align:center; text-decoration:none; margin-bottom:8px;" href="${escapeAttr(gfUrl)}" target="_blank" rel="noopener noreferrer">🛡 O'sha reysni xavfsiz ochish ➔</a>`
       : "";
 
     card.innerHTML = `
@@ -344,6 +357,7 @@ function renderOrders(orders) {
 
       ${flightInfoHtml}
       ${flightLinkHtml}
+      ${safeBuyLinkHtml}
 
       <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
         <span>👤 Telegram: <code>${telegramId}</code> ${username ? "(@" + username + ")" : ""}</span>
