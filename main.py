@@ -198,11 +198,14 @@ GOOGLE_FLIGHTS_BASE = "https://www.google.com/travel/flights?q="
 
 
 def _google_flights_url(order: dict, flight_data: dict) -> str:
-    """Aynan shu reysni ochadigan Google Flights havolasi (URL-encode qilingan).
+    """Aynan shu marshrut va sanani ochadigan Google Flights havolasi (URL-encode qilingan).
 
-    So'rov: "flights from {origin} to {destination} on {sana}" — aviakompaniya
-    nomi bo'lsa oxiriga " on {aviakompaniya}" qo'shiladi, shunda Google Flights
-    aynan o'sha reysni ko'rsatadi.
+    So'rov: "flights from {origin} to {destination} on {sana}".
+
+    Izoh: Google Flights `?q=` parametri faqat marshrut + sanani ishonchli taniydi.
+    Aviakompaniya (ayniqsa IATA kodi, masalan "HY") qo'shilsa, so'rov taniilmasligi
+    va havola bo'sh Google Flights sahifasiga olib borishi mumkin. "Aynan o'sha reys"
+    ni xarid qilish esa aviakompaniya rasmiy sayti havolasi orqali beriladi.
     """
     origin_safe = str(order.get("origin") or "").strip()
     dest_safe = str(order.get("destination") or "").strip()
@@ -217,11 +220,7 @@ def _google_flights_url(order: dict, flight_data: dict) -> str:
         depart_raw = str(order.get("depart_date") or "").strip()
     depart_safe = depart_raw[:10]
 
-    f_airline = str(flight_data.get("airline") or "").strip()
-
     gf_query = f"flights from {origin_safe} to {dest_safe} on {depart_safe}"
-    if f_airline:
-        gf_query += f" on {f_airline}"
     return GOOGLE_FLIGHTS_BASE + quote(gf_query)
 
 
@@ -492,18 +491,21 @@ async def api_create_order(payload: dict):
         if link_value.lower().startswith(("http://", "https://")):
             safe_link = html.escape(link_value)
             flight_info_lines.append(f"🔗 Chiptani shu havoladan oling: {safe_link}")
-        # Xavfsiz xarid: aynan shu reysni Google Flights'da ochadigan havola
+        # Xavfsiz xarid: aynan shu marshrut+sanani Google Flights'da ochadigan havola
         gf_url = _google_flights_url(order, flight_data)
         gf_href = html.escape(gf_url, quote=True)
         flight_info_lines.append(
-            f"✅ <b>Xavfsiz xarid:</b> <a href=\"{gf_href}\">O'sha reysni ochish ➔</a>"
+            f"✅ <b>Xavfsiz xarid:</b> <a href=\"{gf_href}\">Reysni Google Flights'da ochish ➔</a>"
         )
-        # Aviakompaniya rasmiy sayti (kod yoki to'liq nom bo'yicha) — XSS himoyasi bilan
+        # Aviakompaniya rasmiy sayti (kod yoki to'liq nom bo'yicha) — XSS himoyasi bilan.
+        # Bu aynan shu aviakompaniya chiptasini xarid qilish uchun eng ishonchli havola.
         official = _official_airline_site(flight_data)
         if official:
             official_name, official_url = official
+            official_href = html.escape(official_url, quote=True)
             flight_info_lines.append(
-                f"🏢 <b>Rasmiy sayt:</b> {html.escape(official_name)} — {html.escape(official_url)}"
+                f"🏢 <b>Rasmiy sayt:</b> {html.escape(official_name)} — "
+                f"<a href=\"{official_href}\">Chiptani xarid qilish ➔</a>"
             )
 
     flight_info_block = ""

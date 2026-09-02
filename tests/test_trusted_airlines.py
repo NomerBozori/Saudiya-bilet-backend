@@ -221,7 +221,8 @@ async def test_admin_message_contains_official_site_by_airline_code(code, offici
     res, mock_send, _ = await _create_order({"airline": code, "flight_number": f"{code}-001"})
     assert res.status_code == 200
     text = mock_send.await_args.args[1]
-    assert f"🏢 <b>Rasmiy sayt:</b> {official_name} — {url}" in text
+    expected = f'🏢 <b>Rasmiy sayt:</b> {official_name} — <a href="{url}">Chiptani xarid qilish ➔</a>'
+    assert expected in text
 
 
 @pytest.mark.asyncio
@@ -229,7 +230,10 @@ async def test_admin_message_contains_official_site_by_full_name():
     res, mock_send, _ = await _create_order({"airline": "Uzbekistan Airways"})
     assert res.status_code == 200
     text = mock_send.await_args.args[1]
-    assert "🏢 <b>Rasmiy sayt:</b> UZBEKISTAN AIRWAYS — https://www.uzairways.com" in text
+    assert (
+        '🏢 <b>Rasmiy sayt:</b> UZBEKISTAN AIRWAYS — '
+        '<a href="https://www.uzairways.com">Chiptani xarid qilish ➔</a>' in text
+    )
 
 
 @pytest.mark.asyncio
