@@ -309,9 +309,11 @@ function renderOrders(orders) {
     // Qo'lda/agentlik orqali qo'shilgan chiptalar (manual, direct_agency, centrum_air) bundan mustasno.
     const flightSource = String(flightData.source || "").trim().toLowerCase();
     const NON_PUBLIC_SOURCES = ["manual", "direct_agency", "centrum_air"];
-    // Google Flights `?q=` faqat marshrut + sanani ishonchli taniydi; aviakompaniya
-    // (ayniqsa IATA kodi) qo'shilsa so'rov taniilmasligi mumkin — shuning uchun qo'shilmaydi.
-    const gfQuery = `flights from ${(order.origin || "").toUpperCase()} to ${(order.destination || "").toUpperCase()} on ${order.depart_date || ""}`;
+    // Aynan o'sha reysga olib boradigan Google Flights so'rovi:
+    // marshrut + sana, aviakompaniya ma'lum bo'lsa u ham qo'shiladi.
+    const gfAirline = String(flightData.airline || "").trim();
+    const gfQuery = `flights from ${(order.origin || "").toUpperCase()} to ${(order.destination || "").toUpperCase()} on ${order.depart_date || ""}`
+      + (gfAirline ? ` on ${gfAirline}` : "");
     const gfUrl = "https://www.google.com/travel/flights?q=" + encodeURIComponent(gfQuery);
 
     const flightInfoHtml = (flightAirline || flightDeparture)

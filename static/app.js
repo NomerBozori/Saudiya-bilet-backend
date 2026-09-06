@@ -578,24 +578,6 @@ function boardingPassHTML(order, passport, opts={}){
 window.closeBoardingPass=function(){ const modal=document.getElementById("bp-modal"); if(modal) modal.classList.add("hidden"); };
 window.openBoardingPass=function(html){ const modal=document.getElementById("bp-modal"); const body=document.getElementById("bp-modal-body"); if(body) body.innerHTML=html; if(modal) modal.classList.remove("hidden"); };
 
-// ==================== ZAXIRA REYSLAR ====================
-function generateComprehensiveFlights(origin, destination, date){
-  // MUHIM: bular haqiqiy bron qilingan reyslar EMAS — jadval bo'yicha taxminiy
-  // variantlar. Narx va joylar admin tomonidan tasdiqlanadi (source: "estimate").
-  const originCode=(origin||"TAS").toUpperCase();
-  const destCode=(destination||"JED").toUpperCase();
-  const airlinesPool=[
-    {name:"⭐ Centrum Air (To'g'ridan-to'g'ri)", flightNum:"C6-331", depTime:"06:30", arrTime:"10:15", duration:"5s 45d", price:380, baggage:"30 kg + 7 kg", direct:true},
-    {name:"Uzbekistan Airways", flightNum:"HY-3381", depTime:"09:45", arrTime:"13:20", duration:"5s 35d", price:420, baggage:"30 kg + 8 kg", direct:true},
-    {name:"Flynas", flightNum:"XY-612", depTime:"14:15", arrTime:"18:00", duration:"5s 45d", price:370, baggage:"20 kg + 7 kg", direct:true},
-    {name:"Saudia", flightNum:"SV-841", depTime:"18:20", arrTime:"22:05", duration:"5s 45d", price:460, baggage:"2x23 kg (46 kg)", direct:true},
-    {name:"Panorama Airways", flightNum:"5P-552", depTime:"04:00", arrTime:"07:45", duration:"5s 45d", price:390, baggage:"30 kg + 7 kg", direct:true},
-    {name:"💸 Air Arabia (Arzon Tranzit)", flightNum:"G9-224", depTime:"11:20", arrTime:"17:40", duration:"7s 20d", price:325, baggage:"30 kg + 7 kg", direct:false},
-    {name:"Jazeera Airways", flightNum:"J9-682", depTime:"05:10", arrTime:"10:30", duration:"6s 20d", price:335, baggage:"30 kg + 7 kg", direct:false}
-  ];
-  return airlinesPool.map((item,idx)=>({ origin:originCode, destination:destCode, price:item.price, airline:item.name, flight_number:item.flightNum, departure_time:item.depTime, arrival_time:item.arrTime, duration:item.duration, baggage:item.baggage, transfers:item.direct?0:1, source:"estimate" }));
-}
-
 // ==================== QIDIRUV ====================
 const btnSearch=document.getElementById("btn-search");
 if(btnSearch){
@@ -614,17 +596,15 @@ if(btnSearch){
       const url=`${API_BASE_URL}/api/search?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&depart_date=${encodeURIComponent(departDate)}`;
       const res=await fetch(url);
       const data=await res.json();
-      let apiResults=data.results||[];
-      const allFlights=generateComprehensiveFlights(origin,destination,departDate);
-      let combinedResults=[...apiResults];
-      allFlights.forEach(f=>{ if(!combinedResults.some(r=>r.airline===f.airline && r.price===f.price)) combinedResults.push(f); });
-      lastFlightResults=combinedResults;
-      renderResults(combinedResults);
+      // REAL-ONLY: faqat API'dan qaytgan haqiqiy natijalar ko'rsatiladi.
+      const apiResults=Array.isArray(data.results)?data.results:[];
+      lastFlightResults=apiResults;
+      renderResults(apiResults);
       showScreen("screen-results");
     } catch(e){
-      const allFlights=generateComprehensiveFlights(origin,destination,departDate);
-      lastFlightResults=allFlights;
-      renderResults(allFlights);
+      // Xatolik bo'lsa ham soxta reys yaratilmaydi — bo'sh natija ko'rsatiladi
+      lastFlightResults=[];
+      renderResults([]);
       showScreen("screen-results");
     } finally {
       tg.MainButton?.hideProgress();

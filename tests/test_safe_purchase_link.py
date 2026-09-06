@@ -67,62 +67,53 @@ async def _create_order(flight_data, order_row=None):
 
 # ==================== 1. GOOGLE FLIGHTS URL YASALISHI ====================
 
-def test_google_flights_url_exact_for_route_and_date():
+def test_google_flights_url_exact_for_route_date_and_airline():
     url = _google_flights_url(ORDER_ROW, {"airline": "HY"})
     assert url == (
         "https://www.google.com/travel/flights?q="
-        "flights%20from%20TAS%20to%20JED%20on%202026-09-01"
+        "flights%20from%20TAS%20to%20JED%20on%202026-09-01%20on%20HY"
     )
 
 
 def test_google_flights_url_without_airline_suffix():
     url = _google_flights_url(ORDER_ROW, {})
     assert url == GOOGLE_FLIGHTS_BASE + "flights%20from%20TAS%20to%20JED%20on%202026-09-01"
-    assert "2026-09-01%20on%20" not in url  # aviakompaniya qo'shilmaydi
 
 
-def test_google_flights_url_ignores_airline():
-    # Aviakompaniya Google Flights so'roviga umuman qo'shilmaydi (u so'rovni buzadi)
+def test_google_flights_url_ignores_blank_airline():
     assert _google_flights_url(ORDER_ROW, {"airline": "   "}) == _google_flights_url(ORDER_ROW, {})
-    assert _google_flights_url(ORDER_ROW, {"airline": "HY"}) == _google_flights_url(ORDER_ROW, {})
 
 
 def test_google_flights_url_takes_date_part_from_departure_at():
     url = _google_flights_url(ORDER_ROW, {"departure_at": "2026-09-01T09:30:00", "airline": "SV"})
     assert "%20on%202026-09-01" in url
     assert "09%3A30" not in url  # vaqt qismi so'rovga tushmaydi
-    assert "%20on%20SV" not in url  # aviakompaniya ham so'rovga tushmaydi
+    assert url.endswith("%20on%20SV")
 
 
 def test_google_flights_url_falls_back_to_order_date_for_time_only():
-    # flight_data'da faqat vaqt ("09:30") bo'lsa — buyurtma sanasi ishlatiladi
     url = _google_flights_url(ORDER_ROW, {"departure_time": "09:30", "airline": "TK"})
-    assert "flights%20from%20TAS%20to%20JED%20on%202026-09-01" in url
-    assert "%20on%20TK" not in url
+    assert "flights%20from%20TAS%20to%20JED%20on%202026-09-01%20on%20TK" in url
 
 
 def test_google_flights_url_percent_encodes_spaces():
     url = _google_flights_url(ORDER_ROW, {"airline": "Uzbekistan Airways"})
     assert " " not in url
-    assert "%20" in url
-    # aviakompaniya endi so'rovga qo'shilmaydi
-    assert "Uzbekistan" not in url
+    assert "Uzbekistan%20Airways" in url
 
 
-def test_google_flights_url_never_includes_airline_in_query():
-    # Aviakompaniya maydoniga script kiritilsa ham so'rovga tushmaydi (XSS/URL buzilishi yo'q)
+def test_google_flights_url_encodes_unsafe_airline_characters():
+    # Aviakompaniya maydonida xavfli belgilar bo'lsa ham URL buzilmaydi (encode qilinadi)
     url = _google_flights_url(ORDER_ROW, {"airline": '"><script>alert(1)</script>'})
     q = url.split("?q=", 1)[1]
     assert "<" not in q and ">" not in q and '"' not in q
-    assert "script" not in q.lower()
-    assert url == _google_flights_url(ORDER_ROW, {})
 
 
 def test_google_flights_url_roundtrips_through_parse_qs():
     url = _google_flights_url(ORDER_ROW, {"airline": "Centrum Air", "departure_at": "2026-09-15T07:05:00"})
     parsed = urlparse(url)
     assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "https://www.google.com/travel/flights"
-    assert parse_qs(parsed.query)["q"] == ["flights from TAS to JED on 2026-09-15"]
+    assert parse_qs(parsed.query)["q"] == ["flights from TAS to JED on 2026-09-15 on Centrum Air"]
 
 
 # ==================== 2. ADMIN XABARIDAGI QATORLAR ====================
@@ -132,11 +123,11 @@ async def test_admin_message_safe_purchase_line_format():
     text = await _create_order({"airline": "HY", "flight_number": "HY-501"})
     expected_href = html.escape(
         "https://www.google.com/travel/flights?q="
-        "flights%20from%20TAS%20to%20JED%20on%202026-09-01",
+        "flights%20from%20TAS%20to%20JED%20on%202026-09-01%20on%20HY",
         quote=True,
     )
     assert (
-        f"✅ <b>Xavfsiz xarid:</b> <a href=\"{expected_href}\">Reysni Google Flights'da ochish ➔</a>"
+        f"✅ <b>Xavfsiz xarid:</b> <a href=\"{expected_href}\">O'sha reysni ochish ➔</a>"
         in text
     )
 
@@ -225,6 +216,7 @@ async def test_admin_js_served_and_has_safe_purchase_button(admin_js):
     assert "🛡 O'sha reysni xavfsiz ochish ➔" in admin_js
     assert "https://www.google.com/travel/flights?q=" in admin_js
     assert "encodeURIComponent(gfQuery)" in admin_js
+    assert "gfAirline ? ` on ${gfAirline}`" in admin_js
 
 
 @pytest.mark.asyncio

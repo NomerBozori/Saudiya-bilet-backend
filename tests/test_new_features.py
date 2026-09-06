@@ -236,10 +236,50 @@ async def test_calendar_prefers_cheaper_manual_flight():
     assert day["source"] == "manual"
 
 
-def test_calendar_pseudo_price_is_stable():
-    a = tp._pseudo_price("TAS", "JED", "2026-09-01")
-    b = tp._pseudo_price("TAS", "JED", "2026-09-01")
-    assert a == b and a > 0
+@pytest.mark.asyncio
+async def test_calendar_prices_return_empty_without_token():
+    """REAL-ONLY: token bo'lmasa hech qanday sintetik narx qaytmaydi."""
+    with patch.object(tp.settings, "TRAVELPAYOUTS_TOKEN", ""):
+        calendar = await tp.get_calendar_prices("TAS", "JED", None, days=5)
+    assert calendar == []
+
+
+@pytest.mark.asyncio
+async def test_calendar_prices_only_real_api_dates():
+    """Faqat API bergan sanalar qaytadi — narxi yo'q kunlar umuman chiqmaydi."""
+    start = date.today() + timedelta(days=3)
+    real_day = start.isoformat()
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"data": [
+                {"departure_at": real_day + "T09:30:00", "price": 300,
+                 "airline": "HY", "flight_number": "601", "transfers": 0},
+                {"departure_at": real_day + "T18:00:00", "price": 280,
+                 "airline": "SV", "flight_number": "841", "transfers": 0},
+            ]}
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get(self, url, params=None):
+            return FakeResponse()
+
+    with patch.object(tp.settings, "TRAVELPAYOUTS_TOKEN", "dummy"), \
+         patch.object(tp.httpx, "AsyncClient", lambda *a, **kw: FakeClient()):
+        calendar = await tp.get_calendar_prices("TAS", "JED", start.isoformat(), days=5)
+
+    assert [d["date"] for d in calendar] == [real_day]
+    assert calendar[0]["source"] == "api"
+    assert calendar[0]["price"] == tp._apply_markup(280)
+    assert all(d["source"] == "api" for d in calendar)
 
 
 # ==================== 3. TELEGRAM ADMIN 1-CLICK TUGMALARI ====================
@@ -553,7 +593,9 @@ async def test_no_fake_class_claims_in_miniapp():
     assert "Taxminiy narx — admin tasdiqlaydi" in js
     assert "Jonli narx" in js
     assert "results-note" in js
-    assert 'source:"estimate"' in js
+    # REAL-ONLY: Mini App endi o'zi reys yaratmaydi
+    assert "generateComprehensiveFlights" not in js
+    assert 'source:"estimate"' not in js
 
 
 # ==================== FOYDA USTAMASI ====================
