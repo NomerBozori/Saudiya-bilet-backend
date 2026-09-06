@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import logging
 from datetime import date, datetime, timedelta
 
@@ -93,22 +92,6 @@ CITY_NAMES_UZ: dict[str, str] = {
     "DXB": "Dubay",
     "IST": "Istanbul",
 }
-
-# Har bir aeroport uchun taxminiy (bazaviy) narx — API javob bermaganda ishlatiladi
-_BASE_PRICES: dict[str, int] = {
-    "TAS": 349,
-    "NMA": 369,
-    "SKD": 359,
-    "FEG": 375,
-    "BHK": 379,
-    "AZN": 385,
-    "UGC": 395,
-    "TMJ": 389,
-    "NVI": 372,
-    "KSQ": 392,
-    "NCU": 399,
-}
-
 
 def city_name(code: str) -> str:
     """IATA kodini o'zbekcha shahar nomiga aylantiradi."""
@@ -232,8 +215,8 @@ def _build_affiliate_link(raw_link: str) -> str:
 
 # ==================== ISHONCHLI AVIATASHUVCHILAR ====================
 # Qidiruv (search) natijalarida faqat shu aviakompaniyalarning Travelpayouts
-# API takliflari ko'rsatiladi. Qo'lda qo'shilgan (manual) va zaxira/generatsiya
-# qilingan chiptalar bu ro'yxatga bog'liq emas — ularga tegilmaydi.
+# API takliflari ko'rsatiladi. Qo'lda qo'shilgan (manual) charterlar bu ro'yxatga
+# bog'liq emas — ularga tegilmaydi. REAL-ONLY: sintetik/generatsiya reyslar yo'q.
 TRUSTED_AIRLINES: frozenset[str] = frozenset({
     "HY",  # Uzbekistan Airways
     "C6",  # Centrum Air
@@ -500,79 +483,6 @@ async def get_daily_cheapest(
 
     # Yakuniy qat'iy filtr: uzoq sanalar (dekabr, yanvar...) hech qanday holatda o'tmasin
     return filter_offers_by_window(results, min_days, max_days, today=today)
-
-
-def _pseudo_price(origin: str, destination: str, day: str) -> int:
-    """API javob bermaganda ishlatiladigan barqaror (deterministik) taxminiy narx."""
-    base = _BASE_PRICES.get((origin or "").upper(), 380)
-    if (destination or "").upper() == "MED":
-        base += 18
-    seed = hashlib.md5(f"{origin}{destination}{day}".encode()).hexdigest()
-    delta = int(seed[:4], 16) % 71 - 35  # -35 ... +35
-    return max(199, base + delta)
-
-
-def build_fallback_offers(
-    origins: list[str] | None = None,
-    destinations: list[str] | None = None,
-    min_days: int = MIN_DAYS_AHEAD,
-    max_days: int = MAX_DAYS_AHEAD,
-    today: date | None = None,
-) -> list[dict]:
-    """Barcha 11 ta aeroportdan Jidda/Madinaga zaxira (taxminiy) narxlar ro'yxati.
-
-    Sanalar faqat yaqin 3–35 kun oynasidan tanlanadi — uzoq oylar (dekabr, yanvar)
-    hech qachon zaxira postga tushmaydi.
-    """
-    origin_codes = origins or UZ_AIRPORTS
-    dest_codes = destinations or SAUDI_DESTINATIONS
-    base_day = today or date.today()
-    span = max(1, max_days - min_days + 1)
-
-    offers: list[dict] = []
-    for idx, origin in enumerate(origin_codes):
-        for j, dest in enumerate(dest_codes):
-            # Sanalar oyna bo'ylab bir tekis taqsimlanadi (deterministik)
-            offset = min_days + ((idx * len(dest_codes) + j) * 3) % span
-            day = (base_day + timedelta(days=offset)).isoformat()
-            offers.append({
-                "origin": origin,
-                "destination": dest,
-                "origin_name": city_name(origin),
-                "destination_name": city_name(dest),
-                "value": _pseudo_price(origin, dest, day),
-                "depart_date": day,
-                "days_left": offset,
-                "depart_date_label": format_date_uz(day),
-                "source": "fallback",
-            })
-    return offers
-
-
-def top_up_missing_cities(
-    offers: list[dict],
-    origins: list[str] | None = None,
-    destinations: list[str] | None = None,
-    min_days: int = MIN_DAYS_AHEAD,
-    max_days: int = MAX_DAYS_AHEAD,
-    today: date | None = None,
-) -> list[dict]:
-    """API'dan tushmay qolgan shaharlarni zaxira (3–35 kunlik) takliflar bilan to'ldiradi.
-
-    Shu tufayli postda har doim O'zbekistonning 11 ta aeroporti ham qatnashadi.
-    """
-    origin_codes = origins or UZ_AIRPORTS
-    present = {str(o.get("origin") or "").upper() for o in (offers or [])}
-    missing = [o for o in origin_codes if o not in present]
-    if not missing:
-        return list(offers or [])
-    return list(offers or []) + build_fallback_offers(
-        origins=missing,
-        destinations=destinations,
-        min_days=min_days,
-        max_days=max_days,
-        today=today,
-    )
 
 
 def pick_mixed_offers(

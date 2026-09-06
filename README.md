@@ -44,8 +44,9 @@ Uzoq dekabr/yanvar sanalari umuman tushmaydi.
 `TAS, NMA, SKD, FEG, BHK, AZN, UGC, TMJ, NVI, KSQ, NCU` → `JED` va `MED`.
 
 - `pick_mixed_offers()` — bitta shahar ikki marta takrorlanmaydi, Jidda/Madina navbatma-navbat aralashadi
-- `top_up_missing_cities()` — API'dan tushmagan shaharlar 3–35 kunlik zaxira takliflar bilan
-  to'ldiriladi, shuning uchun postda har doim 11 ta aeroport qatnashadi
+- **REAL-ONLY rejim** — faqat Travelpayouts API bergan haqiqiy takliflar va admin qo'shgan
+  charterlar ko'rsatiladi. API'dan tushmagan shaharlar uchun soxta/taxminiy narx yaratilmaydi;
+  haqiqiy taklif bo'lmasa post yuborilmaydi (`posted: 0`)
 
 ### 3. Arzon narxlar taqvimi — `GET /api/calendar`
 Mini Appdagi gorizontal taqvim: har bir kun uchun eng arzon narx, eng arzon kun alohida belgilanadi.

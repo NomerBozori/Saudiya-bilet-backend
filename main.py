@@ -130,7 +130,7 @@ def _validate_payment_file(filename: str, content: bytes, content_type: str) -> 
         )
 
 # Joriy build versiyasi — deploy yangilanganini tekshirish uchun (/api/version)
-APP_BUILD = "v14"
+APP_BUILD = "v15"
 APP_BUILD_FEATURES = [
     "ixcham viza kartochkalari va operator tugmalari",
     "ixcham qidiruv oqimi",
@@ -918,8 +918,9 @@ async def api_top_deals(limit: int = 8, refresh: bool = False):
             log.exception("Top-deals narxlarini olishda xatolik")
             tickets = []
 
+        # REAL-ONLY: faqat Travelpayouts API'dan kelgan haqiqiy takliflar.
+        # Zaxira (taxminiy) narxlar bilan to'ldirilmaydi — bo'sh bo'lsa bo'sh qaytadi.
         valid = tp.filter_offers_by_window([t for t in (tickets or []) if t.get("value") is not None])
-        valid = tp.top_up_missing_cities(valid)
         picked = tp.pick_mixed_offers(valid, limit=11)
 
         deals = []
@@ -1059,20 +1060,13 @@ async def api_daily_post(
         max_days=max_days,
     )
 
-    used_fallback = not valid_tickets
-
-    # 2) API'dan tushmagan shaharlar zaxira (taxminiy) narxlar bilan to'ldiriladi,
-    #    shunda kanal bo'sh qolmaydi va 11 ta aeroport ham qatnashadi
-    valid_tickets = tp.top_up_missing_cities(
-        valid_tickets,
-        min_days=min_days,
-        max_days=max_days,
-    )
-
+    # 2) REAL-ONLY: API'dan tushmagan shaharlar uchun soxta/taxminiy narx
+    #    yaratilmaydi. Haqiqiy taklif bo'lmasa — post yuborilmaydi.
     # Turfa xil aralash reyslar: bitta shahar (aeroport) takrorlanmaydi
     selected = tp.pick_mixed_offers(valid_tickets, limit=max(1, min(int(limit or 11), 11)))
     if not selected:
-        return {"posted": 0}
+        log.info("Kunlik post: haqiqiy (API) takliflar topilmadi — post yuborilmadi")
+        return {"posted": 0, "window": {"min_days": min_days, "max_days": max_days}, "cities": [], "dates": []}
 
     rate_info = await get_cbu_usd_rate()
     uzs_rate = float(rate_info.get("rate") or CBU_FALLBACK_RATE)
@@ -1119,7 +1113,6 @@ async def api_daily_post(
         await bot.send_message(settings.CHANNEL_ID, text, parse_mode="HTML")
         return {
             "posted": len(selected),
-            "fallback": used_fallback,
             "window": {"min_days": min_days, "max_days": max_days},
             "cities": [str(t.get("origin") or "").upper() for t in selected],
             "dates": [t.get("depart_date") for t in selected],
