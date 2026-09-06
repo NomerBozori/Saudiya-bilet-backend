@@ -76,8 +76,9 @@ async def test_daily_post_cron():
             res2 = await ac.post("/api/cron/daily-post?secret=testcron")
             assert res2.status_code == 200
             body = res2.json()
-            # Qolgan shaharlar zaxira takliflar bilan to'ldiriladi -> 11 ta aeroport
-            assert body["posted"] == 11
+            # REAL-ONLY: faqat API bergan haqiqiy shahar (TAS) — zaxira bilan to'ldirilmaydi
+            assert body["posted"] == 1
+            assert body["cities"] == ["TAS"]
             assert soon in body["dates"]
             mock_send.assert_awaited_once()
 

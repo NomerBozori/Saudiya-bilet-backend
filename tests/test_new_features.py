@@ -32,16 +32,26 @@ def test_uz_airports_list():
     assert tp.SAUDI_DESTINATIONS == ["JED", "MED"]
 
 
-def test_fallback_offers_cover_all_airports():
-    offers = tp.build_fallback_offers()
-    origins = {o["origin"] for o in offers}
-    assert origins == set(tp.UZ_AIRPORTS)
-    assert {o["destination"] for o in offers} == {"JED", "MED"}
-    assert all(o["value"] > 0 for o in offers)
+def _real_offers_all_airports(days_ahead: int = 7) -> list[dict]:
+    """Testlar uchun: 11 ta aeroportdan JED/MED ga 'haqiqiy' API takliflari."""
+    day = (date.today() + timedelta(days=days_ahead)).isoformat()
+    offers = []
+    for i, origin in enumerate(tp.UZ_AIRPORTS):
+        for j, dest in enumerate(tp.SAUDI_DESTINATIONS):
+            offers.append({"origin": origin, "destination": dest, "value": 300 + i * 5 + j,
+                           "depart_date": day, "source": "api"})
+    return offers
+
+
+def test_no_synthetic_fallback_helpers_left():
+    """REAL-ONLY: soxta narx yaratuvchi yordamchilar butunlay o'chirilgan."""
+    for name in ("build_fallback_offers", "top_up_missing_cities", "_pseudo_price",
+                 "_BASE_PRICES", "generate_airline_direct_flights"):
+        assert not hasattr(tp, name), f"{name} hali ham mavjud"
 
 
 def test_pick_mixed_offers_no_duplicate_cities():
-    offers = tp.build_fallback_offers()
+    offers = _real_offers_all_airports()
     picked = tp.pick_mixed_offers(offers, limit=11)
     origins = [p["origin"] for p in picked]
     assert len(origins) == 11
@@ -66,7 +76,7 @@ def test_pick_mixed_offers_picks_cheapest_per_city():
 async def test_daily_post_mixes_all_airports():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        with patch("travelpayouts.get_daily_cheapest", return_value=[]), \
+        with patch("travelpayouts.get_daily_cheapest", new=AsyncMock(return_value=_real_offers_all_airports())), \
              patch("main.get_cbu_usd_rate", new=AsyncMock(return_value={"rate": 12500.0})), \
              patch("main.bot.send_message", new_callable=AsyncMock) as mock_send:
             res = await ac.post("/api/cron/daily-post?secret=testcron")
@@ -78,6 +88,20 @@ async def test_daily_post_mixes_all_airports():
     for code in tp.UZ_AIRPORTS:
         assert code in text
     assert "JED" in text and "MED" in text
+
+
+@pytest.mark.asyncio
+async def test_daily_post_skips_when_no_real_offers():
+    """REAL-ONLY: API'dan haqiqiy taklif kelmasa — soxta narx bilan post yuborilmaydi."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        with patch("travelpayouts.get_daily_cheapest", new=AsyncMock(return_value=[])), \
+             patch("main.get_cbu_usd_rate", new=AsyncMock(return_value={"rate": 12500.0})), \
+             patch("main.bot.send_message", new_callable=AsyncMock) as mock_send:
+            res = await ac.post("/api/cron/daily-post?secret=testcron")
+    assert res.status_code == 200
+    assert res.json()["posted"] == 0
+    mock_send.assert_not_awaited()
 
 
 # ==================== 1B. AVTO-POST SANA OYNASI: 3–35 KUN ====================
@@ -112,22 +136,12 @@ def test_filter_offers_by_window_drops_far_dates():
     assert kept[0]["depart_date_label"].startswith("01.09.2026")
 
 
-def test_fallback_offers_only_inside_window():
-    today = date.today()
-    offers = tp.build_fallback_offers()
-    assert offers, "Zaxira takliflar bo'sh bo'lmasligi kerak"
-    for o in offers:
-        left = (date.fromisoformat(o["depart_date"]) - today).days
-        assert tp.MIN_DAYS_AHEAD <= left <= tp.MAX_DAYS_AHEAD, f"{o['origin']} sanasi oynadan tashqarida"
-
-
-def test_top_up_missing_cities_fills_all_airports():
+def test_pick_mixed_offers_does_not_invent_missing_cities():
+    """REAL-ONLY: faqat bitta shahar kelsa — faqat o'sha shahar qaytadi, qolganlari to'ldirilmaydi."""
     offers = [{"origin": "TAS", "destination": "JED", "value": 300,
                "depart_date": (date.today() + timedelta(days=5)).isoformat()}]
-    topped = tp.top_up_missing_cities(offers)
-    origins = {o["origin"] for o in topped}
-    assert origins == set(tp.UZ_AIRPORTS)
-    assert len([o for o in topped if o["origin"] == "TAS"]) == 1, "Mavjud shahar takrorlanmasligi kerak"
+    picked = tp.pick_mixed_offers(offers, limit=11)
+    assert [o["origin"] for o in picked] == ["TAS"]
 
 
 def test_format_date_uz():
@@ -164,7 +178,8 @@ async def test_daily_post_excludes_far_dates():
 
     text = mock_send.await_args.args[1]
     assert "2026-12" not in text and "2027-01" not in text
-    assert len(set(body["cities"])) == 11
+    # REAL-ONLY: faqat haqiqiy (oyna ichidagi) shahar — TAS; NMA uzoq sanada edi, to'ldirilmaydi
+    assert body["cities"] == ["TAS"]
 
 
 @pytest.mark.asyncio
@@ -178,7 +193,9 @@ async def test_daily_post_cannot_widen_date_window():
             res = await ac.post("/api/cron/daily-post?secret=testcron&min_days=0&max_days=999")
 
     assert res.status_code == 200
-    assert res.json()["window"] == {"min_days": 3, "max_days": 35}
+    body = res.json()
+    assert body["window"] == {"min_days": 3, "max_days": 35}
+    assert body["posted"] == 0  # REAL-ONLY: haqiqiy taklif yo'q — post yo'q
 
 
 @pytest.mark.asyncio
@@ -590,12 +607,12 @@ async def test_no_fake_class_claims_in_miniapp():
         assert phrase not in js, f"Soxta yorliq qolib ketgan: {phrase}"
         assert phrase not in html, f"Soxta yorliq qolib ketgan: {phrase}"
     assert "resultSeat" not in js and "resultGate" not in js
-    assert "Taxminiy narx — admin tasdiqlaydi" in js
     assert "Jonli narx" in js
     assert "results-note" in js
-    # REAL-ONLY: Mini App endi o'zi reys yaratmaydi
+    # REAL-ONLY: Mini App endi o'zi reys yaratmaydi va "taxminiy" narx ko'rsatmaydi
     assert "generateComprehensiveFlights" not in js
     assert 'source:"estimate"' not in js
+    assert "Taxminiy narx" not in js
 
 
 # ==================== FOYDA USTAMASI ====================

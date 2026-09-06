@@ -640,16 +640,13 @@ function flightBoardingPassHTML(f, idx){
   const price=formatPrice(f.price);
   const date=state.departDate||"-";
 
-  // Narx manbasi — halol ko'rsatiladi
-  const src=f.source||"estimate";
-  const isLive=src==="api";
+  // Narx manbasi — halol ko'rsatiladi (REAL-ONLY: faqat API yoki admin bazasi)
+  const src=f.source||"api";
   const isManual=src==="manual";
-  const statusText=isLive
-    ? "✅ Jonli narx (aviakassa bazasi)"
-    : isManual
-      ? "✅ Tasdiqlangan chipta (bizning bazamiz)"
-      : "⚠️ Taxminiy narx — admin tasdiqlaydi";
-  const statusClass=isLive?"live":(isManual?"manual":"estimate");
+  const statusText=isManual
+    ? "✅ Tasdiqlangan chipta (bizning bazamiz)"
+    : "✅ Jonli narx (aviakassa bazasi)";
+  const statusClass=isManual?"manual":"live";
   const seatsText=f.seats_available?`${f.seats_available} ta joy`:"So'rov bo'yicha";
 
   return `
@@ -712,12 +709,10 @@ function renderResults(flights){
     wrap.querySelector(".bp-ticket")?.addEventListener("click",()=>openBoardingPass(flightBoardingPassHTML(f, idx)));
   });
 
-  const liveCount=flights.filter(f=>(f.source||"")==="api"||(f.source||"")==="manual").length;
+  // REAL-ONLY: barcha natijalar haqiqiy (Travelpayouts API yoki admin bazasi)
   const note=document.createElement("p");
   note.className="results-note";
-  note.innerHTML=liveCount
-    ? `✅ ${liveCount} ta jonli/tasdiqlangan narx · ⚠️ qolganlari <b>taxminiy</b> — admin tasdiqlagach yakuniy narx aytiladi`
-    : `⚠️ Narxlar <b>taxminiy</b> (jadval bo'yicha). Yakuniy narx va joy mavjudligi admin tomonidan tasdiqlanadi.`;
+  note.innerHTML=`✅ ${flights.length} ta <b>haqiqiy</b> reys · Yakuniy narx va joy mavjudligi admin tomonidan tasdiqlanadi.`;
   list.appendChild(note);
 }
 
