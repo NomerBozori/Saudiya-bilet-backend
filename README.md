@@ -70,7 +70,7 @@ GET /api/top-deals?limit=8[&refresh=true]
 
 ### 3C. Keshni o'chirish (eski dizayn muammosi)
 Telegram Mini App statik fayllarni uzoq keshlaydi va foydalanuvchi eski dizaynni ko'rib qolardi.
-Endi `.html/.js/.css` uchun `Cache-Control: no-store` qaytariladi + asset versiyalari (`?v=14`)
+Endi `.html/.js/.css` uchun `Cache-Control: no-store` qaytariladi + asset versiyalari (`?v=15`)
 yangilandi — ilova har doim eng so'nggi versiyani yuklaydi.
 
 ### 4. Telegram admin 1-click inline tugmalari

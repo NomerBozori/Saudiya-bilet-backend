@@ -1,7 +1,7 @@
-// ==================== SOZLAMALAR — v14 Premium Dizayn ====================
+// ==================== SOZLAMALAR — v15 Premium Dizayn ====================
 const API_BASE_URL = "";
 let UZS_RATE = 12850; // Markaziy Bank (CBU) kursi bilan avtomatik yangilanadi
-const APP_VERSION = "v14";
+const APP_VERSION = "v15";
 
 let currentCurrency = "USD";
 let lastFlightResults = [];
@@ -443,7 +443,7 @@ loadTopDeals();
 setInterval(()=>loadTopDeals(), 10 * 60 * 1000);
 
 
-// ==================== 3D KARTA v14 ====================
+// ==================== 3D KARTA v15 ====================
 function init3DCard(){
   const scene=document.getElementById("card-3d-scene");
   const card=document.getElementById("card-3d");
@@ -818,7 +818,7 @@ async function loadUserOrders(){
 console.log(`Saudiya Biletlar ${APP_VERSION} — Yangi dizayn yuklandi ✈️`);
 
 // ==================== BUILD VERSIYASI (eski deployni aniqlash) ====================
-const UI_BUILD = "v14";
+const UI_BUILD = "v15";
 async function showBuildInfo(){
   const el = document.getElementById("app-build");
   if(!el) return;
