@@ -198,14 +198,11 @@ GOOGLE_FLIGHTS_BASE = "https://www.google.com/travel/flights?q="
 
 
 def _google_flights_url(order: dict, flight_data: dict) -> str:
-    """Aynan shu marshrut va sanani ochadigan Google Flights havolasi (URL-encode qilingan).
+    """Aynan shu reysni ochadigan Google Flights havolasi (URL-encode qilingan).
 
-    So'rov: "flights from {origin} to {destination} on {sana}".
-
-    Izoh: Google Flights `?q=` parametri faqat marshrut + sanani ishonchli taniydi.
-    Aviakompaniya (ayniqsa IATA kodi, masalan "HY") qo'shilsa, so'rov taniilmasligi
-    va havola bo'sh Google Flights sahifasiga olib borishi mumkin. "Aynan o'sha reys"
-    ni xarid qilish esa aviakompaniya rasmiy sayti havolasi orqali beriladi.
+    So'rov: "flights from {origin} to {destination} on {sana}" va aviakompaniya
+    ma'lum bo'lsa unga " on {aviakompaniya}" qo'shiladi — shunda havola aynan
+    o'sha reysga olib boradi.
     """
     origin_safe = str(order.get("origin") or "").strip()
     dest_safe = str(order.get("destination") or "").strip()
@@ -221,6 +218,9 @@ def _google_flights_url(order: dict, flight_data: dict) -> str:
     depart_safe = depart_raw[:10]
 
     gf_query = f"flights from {origin_safe} to {dest_safe} on {depart_safe}"
+    airline = str(flight_data.get("airline") or "").strip()
+    if airline:
+        gf_query += f" on {airline}"
     return GOOGLE_FLIGHTS_BASE + quote(gf_query)
 
 
@@ -495,7 +495,7 @@ async def api_create_order(payload: dict):
         gf_url = _google_flights_url(order, flight_data)
         gf_href = html.escape(gf_url, quote=True)
         flight_info_lines.append(
-            f"✅ <b>Xavfsiz xarid:</b> <a href=\"{gf_href}\">Reysni Google Flights'da ochish ➔</a>"
+            f"✅ <b>Xavfsiz xarid:</b> <a href=\"{gf_href}\">O'sha reysni ochish ➔</a>"
         )
         # Aviakompaniya rasmiy sayti (kod yoki to'liq nom bo'yicha) — XSS himoyasi bilan.
         # Bu aynan shu aviakompaniya chiptasini xarid qilish uchun eng ishonchli havola.

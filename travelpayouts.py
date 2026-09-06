@@ -661,7 +661,7 @@ async def get_calendar_prices(
     day_list = [(start + timedelta(days=i)).isoformat() for i in range(days)]
     cheapest: dict[str, dict] = {}
 
-    if origin and destination:
+    if origin and destination and settings.TRAVELPAYOUTS_TOKEN:
         months = sorted({d[:7] for d in day_list})
         async with httpx.AsyncClient(timeout=20) as client:
             for month in months:
@@ -702,18 +702,6 @@ async def get_calendar_prices(
                     log.warning(f"Taqvim narxlarini olishda xatolik ({month}): {e}")
                     continue
 
-    calendar: list[dict] = []
-    for day in day_list:
-        found = cheapest.get(day)
-        if found:
-            calendar.append(found)
-        else:
-            calendar.append({
-                "date": day,
-                "price": float(_pseudo_price(origin, destination, day)),
-                "airline": "",
-                "flight_number": "",
-                "transfers": 0,
-                "source": "estimate",
-            })
-    return calendar
+    # REAL-ONLY: faqat Travelpayouts month-matrix'dan kelgan haqiqiy narxlar.
+    # Narxi topilmagan kunlar umuman qaytarilmaydi (soxta/sintetik narx yo'q).
+    return [cheapest[day] for day in day_list if day in cheapest]
