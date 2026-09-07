@@ -130,8 +130,9 @@ def _validate_payment_file(filename: str, content: bytes, content_type: str) -> 
         )
 
 # Joriy build versiyasi — deploy yangilanganini tekshirish uchun (/api/version)
-APP_BUILD = "v15"
+APP_BUILD = "v16"
 APP_BUILD_FEATURES = [
+    "native sana tanlash (hamma qurilmada ishlaydi)",
     "ixcham viza kartochkalari va operator tugmalari",
     "ixcham qidiruv oqimi",
     "viza arizalari va admin boshqaruvi",

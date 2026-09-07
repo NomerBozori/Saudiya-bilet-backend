@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=15">
+<link rel="stylesheet" href="style.css?v=16">
 </head>
 <body class="tg-body">
 
@@ -92,14 +92,7 @@
           <div class="tg-grid-2">
             <div>
               <label class="tg-label">Jo'nash sanasi</label>
-              <div class="tg-cal-wrap" id="depart_cal_wrap">
-                <button type="button" class="tg-cal-trigger" id="depart_cal_trigger" aria-label="Taqvimni ochish">
-                  <span id="depart_cal_label">Sanani tanlang</span>
-                  <span class="tg-cal-ico">📅</span>
-                </button>
-                <div class="tg-cal-dropdown hidden" id="depart_cal"></div>
-                <input type="hidden" id="depart_date">
-              </div>
+              <input id="depart_date" type="date" class="tg-input">
             </div>
             <div>
               <label class="tg-label">Yo'lovchilar soni</label>
@@ -194,14 +187,7 @@
           </div>
 
           <label class="tg-label">Pasport amal qilish muddati</label>
-          <div class="tg-cal-wrap" id="expiry_cal_wrap">
-            <button type="button" class="tg-cal-trigger" id="expiry_cal_trigger" aria-label="Pasport muddati taqvimi">
-              <span id="expiry_cal_label">Sanani tanlang</span>
-              <span class="tg-cal-ico">📅</span>
-            </button>
-            <div class="tg-cal-dropdown hidden" id="expiry_cal"></div>
-            <input type="hidden" id="p_expiry">
-          </div>
+          <input id="p_expiry" type="date" class="tg-input">
 
           <button id="btn-to-payment" class="tg-btn-primary">Davom etish (To'lovga o'tish) ➔</button>
         </div>
@@ -410,6 +396,6 @@
   <!-- Build versiyasi — deploy yangilanganini tekshirish uchun -->
   <div class="app-build" id="app-build">UI v15 · backend: tekshirilmoqda...</div>
 
-  <script src="app.js?v=15"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>

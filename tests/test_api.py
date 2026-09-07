@@ -15,7 +15,10 @@ async def test_root_endpoint():
         res = await ac.get("/")
     assert res.status_code == 200
     assert "Saudiya Biletlar" in res.text
-    assert "tg-cal-dropdown" in res.text
+    # Sana tanlash — native date input (maxsus taqvim-dropdown olib tashlandi)
+    assert '<input id="depart_date" type="date" class="tg-input">' in res.text
+    assert '<input id="p_expiry" type="date" class="tg-input">' in res.text
+    assert "tg-cal-dropdown" not in res.text
     assert "card-3d" in res.text
     assert "bp-modal" in res.text
 
