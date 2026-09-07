@@ -1,7 +1,7 @@
 // ==================== SOZLAMALAR — v15 Premium Dizayn ====================
 const API_BASE_URL = "";
 let UZS_RATE = 12850; // Markaziy Bank (CBU) kursi bilan avtomatik yangilanadi
-const APP_VERSION = "v15";
+const APP_VERSION = "v16";
 
 let currentCurrency = "USD";
 let lastFlightResults = [];
@@ -194,62 +194,34 @@ async function fetchSuggestions(term, box, input, hidden) {
 setupAutocomplete("origin","origin_code","origin_suggestions");
 setupAutocomplete("destination","destination_code","destination_suggestions");
 
-const UZ_MONTHS = ["Yanvar","Fevral","Mart","Aprel","May","Iyun","Iyul","Avgust","Sentabr","Oktabr","Noyabr","Dekabr"];
-const UZ_WEEK = ["Du","Se","Ch","Pa","Ju","Sh","Ya"];
 const CITY_NAMES = { TAS:"Toshkent", NMA:"Namangan", SKD:"Samarqand", FEG:"Farg‘ona", BHK:"Buxoro", UGC:"Urganch", JED:"Jidda", MED:"Madina", RUH:"Ar-Riyod", DXB:"Dubay", IST:"Istanbul" };
 function isoDate(d){ const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,"0"); const day=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${day}`; }
 function parseISODate(v){ if(!v) return null; const [y,m,d]=v.split("-").map(Number); if(!y||!m||!d) return null; return new Date(y,m-1,d); }
-function formatUzDate(v){ const d=parseISODate(v); if(!d) return "Sanani tanlang"; return `${d.getDate()} ${UZ_MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
 
-function createCalendar({dropdownId, triggerId, labelId, inputId, minDate, startDate}) {
-  const dropdown=document.getElementById(dropdownId);
-  const trigger=document.getElementById(triggerId);
-  const label=document.getElementById(labelId);
-  const input=document.getElementById(inputId);
-  if(!dropdown||!trigger||!label||!input) return;
-  let view = startDate ? new Date(startDate) : new Date(); view.setDate(1);
-  function setValue(iso){ input.value=iso; label.textContent=formatUzDate(iso); }
-  function render(){
-    const year=view.getFullYear(); const month=view.getMonth();
-    const firstDow=(new Date(year,month,1).getDay()+6)%7;
-    const daysInMonth=new Date(year,month+1,0).getDate();
-    const selected=input.value; const todayIso=isoDate(new Date());
-    const minIso=minDate?isoDate(minDate):null;
-    let daysHtml="";
-    for(let i=0;i<firstDow;i++) daysHtml+=`<button type="button" class="tg-cal-day muted" disabled></button>`;
-    for(let day=1; day<=daysInMonth; day++){
-      const iso=isoDate(new Date(year,month,day));
-      const disabled=minIso && iso<minIso;
-      const cls=["tg-cal-day", iso===selected?"selected":"", iso===todayIso?"today":""].join(" ");
-      daysHtml+=`<button type="button" class="${cls}" data-iso="${iso}" ${disabled?"disabled":""}>${day}</button>`;
-    }
-    dropdown.innerHTML=`
-      <div class="tg-cal-head">
-        <button type="button" class="tg-cal-nav" data-nav="-1">‹</button>
-        <strong>${UZ_MONTHS[month]} ${year}</strong>
-        <button type="button" class="tg-cal-nav" data-nav="1">›</button>
-      </div>
-      <div class="tg-cal-week">${UZ_WEEK.map(d=>`<span>${d}</span>`).join("")}</div>
-      <div class="tg-cal-grid">${daysHtml}</div>
-    `;
-    dropdown.querySelectorAll("[data-nav]").forEach(btn=>{ btn.addEventListener("click",(e)=>{ e.stopPropagation(); view.setMonth(view.getMonth()+Number(btn.dataset.nav)); render(); }); });
-    dropdown.querySelectorAll(".tg-cal-day[data-iso]").forEach(btn=>{ btn.addEventListener("click",(e)=>{ e.stopPropagation(); setValue(btn.dataset.iso); dropdown.classList.add("hidden"); trigger.classList.remove("open"); if(inputId==="depart_date"){ window.schedulePriceCalendar?.(120); } }); });
+// ==================== SANA TANLASH (native date input) ====================
+// Eslatma: avvalgi maxsus taqvim-dropdown (createCalendar) Telegram Mini App'da
+// ba'zi qurilmalarda ochilmasdi. Buning o'rniga brauzer/Telegram'ning o'z
+// sana tanlash oynasi ishlatiladi — u har qanday qurilmada ishonchli ishlaydi.
+(function initDateInputs(){
+  const todayIso=isoDate(new Date());
+  const departInput=document.getElementById("depart_date");
+  const expiryInput=document.getElementById("p_expiry");
+  if(departInput){
+    departInput.min=todayIso;
+    const defaultDepart=new Date(); defaultDepart.setDate(defaultDepart.getDate()+2);
+    departInput.value=isoDate(defaultDepart);
+    state.departDate=departInput.value;
+    departInput.addEventListener("change",()=>{
+      state.departDate=departInput.value;
+      // Stripdagi tanlangan kunni darhol belgilaymiz
+      document.querySelectorAll("#price-calendar .pc-day").forEach(el=>{
+        el.classList.toggle("selected", el.dataset.iso===departInput.value);
+      });
+      window.schedulePriceCalendar?.(150);
+    });
   }
-  trigger.addEventListener("click",(e)=>{
-    e.stopPropagation();
-    const willOpen=dropdown.classList.contains("hidden");
-    document.querySelectorAll(".tg-cal-dropdown").forEach(el=>el.classList.add("hidden"));
-    document.querySelectorAll(".tg-cal-trigger").forEach(el=>el.classList.remove("open"));
-    if(willOpen){ dropdown.classList.remove("hidden"); trigger.classList.add("open"); render(); }
-  });
-  document.addEventListener("click",()=>{ dropdown.classList.add("hidden"); trigger.classList.remove("open"); });
-  dropdown.addEventListener("click",(e)=>e.stopPropagation());
-  if(startDate) setValue(isoDate(startDate));
-  render();
-}
-const defaultDepart=new Date(); defaultDepart.setDate(defaultDepart.getDate()+2);
-createCalendar({dropdownId:"depart_cal",triggerId:"depart_cal_trigger",labelId:"depart_cal_label",inputId:"depart_date",minDate:new Date(),startDate:defaultDepart});
-createCalendar({dropdownId:"expiry_cal",triggerId:"expiry_cal_trigger",labelId:"expiry_cal_label",inputId:"p_expiry",minDate:new Date(),startDate:null});
+  if(expiryInput) expiryInput.min=todayIso;
+})();
 const defaultOrigin=document.getElementById("origin"); if(defaultOrigin) defaultOrigin.value="Toshkent (TAS)";
 const defaultDest=document.getElementById("destination"); if(defaultDest) defaultDest.value="Jidda (JED)";
 
@@ -304,9 +276,7 @@ function renderPriceCalendar(days){
 
 function selectCalendarDay(iso){
   const input=document.getElementById("depart_date");
-  const label=document.getElementById("depart_cal_label");
   if(input) input.value=iso;
-  if(label) label.textContent=formatUzDate(iso);
   state.departDate=iso;
   document.querySelectorAll("#price-calendar .pc-day").forEach(el=>{
     el.classList.toggle("selected", el.dataset.iso===iso);
@@ -818,7 +788,7 @@ async function loadUserOrders(){
 console.log(`Saudiya Biletlar ${APP_VERSION} — Yangi dizayn yuklandi ✈️`);
 
 // ==================== BUILD VERSIYASI (eski deployni aniqlash) ====================
-const UI_BUILD = "v15";
+const UI_BUILD = "v16";
 async function showBuildInfo(){
   const el = document.getElementById("app-build");
   if(!el) return;
